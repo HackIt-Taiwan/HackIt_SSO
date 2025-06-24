@@ -28,6 +28,7 @@ services:
       - OIDC_ISSUER=${OIDC_ISSUER:-https://sso.hackit.tw}
       - OIDC_KEY_ID=${OIDC_KEY_ID:-hackit-sso-key-1}
       - ENVIRONMENT=${ENVIRONMENT:-production}
+      - OIDC_ADMIN_KEY=${OIDC_ADMIN_KEY}
     restart: unless-stopped
 
 networks:

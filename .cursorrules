@@ -147,6 +147,13 @@
   - *架構*：所有資料庫操作透過 HTTP API 呼叫，使用 HMAC-SHA256 簽名認證  
   - *結論*：微服務架構提供更好的擴展性和維護性，避免資料庫直接耦合
 
+- **2025-01-12**  
+  - *安全*：實作 OIDC 客戶端註冊管理員金鑰認證機制  
+  - *問題*：原本 `/oidc/register` 端點完全無保護，任何人都能註冊 OIDC 客戶端  
+  - *解決*：新增 `OIDC_ADMIN_KEY` 環境變數和 Bearer Token 認證  
+  - *實作*：支援 Authorization header 和 form data 兩種認證方式，含詳細錯誤日誌  
+  - *結論*：OIDC 註冊必須有適當的存取控制，避免未授權的客戶端註冊
+
 # Scratchpad
 
 ## Plan

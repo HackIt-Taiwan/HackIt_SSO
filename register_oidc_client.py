@@ -16,18 +16,28 @@ def generate_client_secret(length=32):
     """Generate a secure client secret."""
     return secrets.token_urlsafe(length)
 
-def register_client(base_url, client_data):
+def register_client(base_url, client_data, admin_key):
     """Register OIDC client with the SSO server."""
     try:
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {admin_key}"
+        }
+        
         response = requests.post(
             f"{base_url}/oidc/register",
             json=client_data,
-            headers={"Content-Type": "application/json"}
+            headers=headers
         )
         response.raise_for_status()
         return response.json()
     except requests.exceptions.RequestException as e:
         print(f"錯誤：無法註冊 OIDC 客戶端：{e}")
+        if hasattr(e, 'response') and e.response is not None:
+            if e.response.status_code == 401:
+                print("認證錯誤：需要提供有效的管理員金鑰")
+            elif e.response.status_code == 403:
+                print("權限錯誤：管理員金鑰無效")
         return None
 
 def main():
@@ -50,6 +60,13 @@ def main():
         sys.exit(1)
     
     print(f"\n使用 SSO 伺服器：{sso_url}")
+    
+    # Get admin key
+    print("\n🔑 管理員認證")
+    admin_key = input("管理員金鑰 (OIDC_ADMIN_KEY): ").strip()
+    if not admin_key:
+        print("錯誤：管理員金鑰不能為空")
+        sys.exit(1)
     
     # Get client information
     print("\n📝 客戶端資訊")
@@ -117,7 +134,7 @@ def main():
     
     # Register client
     print("\n🚀 註冊客戶端中...")
-    result = register_client(sso_url, client_data)
+    result = register_client(sso_url, client_data, admin_key)
     
     if result and result.get("message"):
         print("✅ 客戶端註冊成功！")

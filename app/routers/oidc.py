@@ -227,14 +227,41 @@ async def userinfo_endpoint(credentials: HTTPAuthorizationCredentials = Depends(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 @router.post("/oidc/register")
-async def register_client(client: OIDCClient):
-    """Register OIDC Client (for development/testing)"""
+async def register_client(
+    client: OIDCClient,
+    request: Request,
+    admin_key: Optional[str] = Form(None)
+):
+    """Register OIDC Client (Admin Only)"""
     try:
+        # Check admin key from form data first, then Authorization header
+        provided_key = admin_key
+        
+        if not provided_key:
+            auth_header = request.headers.get("Authorization")
+            if auth_header and auth_header.startswith("Bearer "):
+                provided_key = auth_header.split(" ")[1]
+        
+        # Verify admin key
+        if not provided_key or not settings.OIDC_ADMIN_KEY:
+            raise HTTPException(
+                status_code=401, 
+                detail="Admin authentication required. Set OIDC_ADMIN_KEY and provide admin_key in request."
+            )
+        
+        if provided_key != settings.OIDC_ADMIN_KEY:
+            logger.warning(f"Invalid OIDC admin key attempt from {request.client.host}")
+            raise HTTPException(status_code=403, detail="Invalid admin key")
+        
+        # Register client
         success = oidc_service.register_client(client)
         if success:
+            logger.info(f"OIDC client '{client.client_id}' registered by admin from {request.client.host}")
             return {"message": "Client registered successfully", "client_id": client.client_id}
         else:
             raise HTTPException(status_code=500, detail="Failed to register client")
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error registering OIDC client: {str(e)}")
         raise HTTPException(status_code=500, detail="Internal server error")

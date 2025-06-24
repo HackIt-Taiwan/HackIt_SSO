@@ -8,17 +8,20 @@ HackIt SSO 現在完全支援 OpenID Connect (OIDC) 標準，允許第三方應�
 
 ### 1. 註冊 OIDC 客戶端
 
+⚠️ **重要：OIDC 客戶端註冊需要管理員金鑰認證**
+
 使用提供的註冊工具：
 
 ```bash
 python register_oidc_client.py
 ```
 
-或手動 POST 請求：
+或手動 POST 請求（需要管理員金鑰）：
 
 ```bash
 curl -X POST https://sso.hackit.tw/oidc/register \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_OIDC_ADMIN_KEY" \
   -d '{
     "client_id": "your-app-id",
     "client_secret": "your-generated-secret",
@@ -28,6 +31,12 @@ curl -X POST https://sso.hackit.tw/oidc/register \
     "response_types": ["code"],
     "scope": "openid profile email"
   }'
+```
+
+**環境變數設定：**
+管理員需要在伺服器上設定 `OIDC_ADMIN_KEY` 環境變數：
+```bash
+OIDC_ADMIN_KEY=your-secure-admin-key-here
 ```
 
 ### 2. OIDC 端點資訊
