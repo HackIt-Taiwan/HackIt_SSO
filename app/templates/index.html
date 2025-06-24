@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HackIt 統一登入</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', path='/css/style.css') }}">
+    <script src="https://unpkg.com/feather-icons"></script>
+    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+</head>
+<body>
+    <div class="background-animation"></div>
+    <div class="particles"></div>
+    <div class="container">
+        <div class="login-card">
+            <div class="card-content">
+                <!-- Login Form (shown when not authenticated) -->
+                <div id="login-section">
+                    <div class="logo-section">
+                        <div class="logo-icon">
+                            <i data-feather="zap"></i>
+                        </div>
+                        <h1 class="title">HackIt</h1>
+                    </div>
+                    <p class="subtitle">改變世界的起點，由你創造</p>
+                    <form id="login-form">
+                        <div class="input-group">
+                            <input type="email" id="email" name="email" placeholder="請輸入您的電子郵件" required>
+                        </div>
+                        <!-- Invisible Turnstile widget -->
+                        <div class="cf-turnstile" 
+                             data-sitekey="{{ turnstile_site_key }}" 
+                             data-callback="onTurnstileSuccess"
+                             data-error-callback="onTurnstileError"
+                             data-expired-callback="onTurnstileExpired"
+                             data-theme="dark"
+                             data-size="invisible">
+                        </div>
+                        <!-- Turnstile configuration -->
+                        <script>
+                            window.TURNSTILE_SITE_KEY = '{{ turnstile_site_key }}';
+                        </script>
+                        <button type="submit" class="magic-link-btn">
+                            <span>發送魔法連結</span>
+                            <i data-feather="arrow-right"></i>
+                        </button>
+                    </form>
+                    <div class="divider">
+                        <span>或</span>
+                    </div>
+                    <div class="social-login">
+                        <button class="social-btn google">
+                            <i data-feather="chrome"></i>
+                            <span>使用 Google 登入</span>
+                        </button>
+                        <button class="social-btn discord">
+                            <i data-feather="message-square"></i>
+                            <span>使用 Discord 登入</span>
+                        </button>
+                    </div>
+                    <p id="response-message"></p>
+                </div>
+                
+                <!-- Logged In State (shown when authenticated) -->
+                <div id="logged-in-section" style="display: none;">
+                    <div class="logo-section">
+                        <div class="logo-icon">
+                            <i data-feather="zap"></i>
+                        </div>
+                        <h1 class="title">HackIt</h1>
+                    </div>
+                    <div class="user-profile">
+                        <div class="user-avatar">
+                            <img id="user-avatar-img" src="" alt="用戶頭像" style="display: none;">
+                            <div id="user-avatar-placeholder" class="avatar-placeholder">
+                                <i data-feather="user"></i>
+                            </div>
+                        </div>
+                        <div class="user-info">
+                            <h2 id="user-name">載入中...</h2>
+                            <p id="user-email">載入中...</p>
+                        </div>
+                    </div>
+                    <div class="logged-in-message">
+                        <h3>您已經登入了！</h3>
+                        <p>您可以繼續使用 HackIt 的所有功能。</p>
+                    </div>
+                    <button id="logout-btn" class="logout-btn">
+                        <i data-feather="log-out"></i>
+                        <span>登出</span>
+                    </button>
+                    <p id="logout-message"></p>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script src="{{ url_for('static', path='/js/script.js') }}"></script>
+    <script>
+        feather.replace()
+    </script>
+</body>
+</html> 

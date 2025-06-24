@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }} - HackIt</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/feather-icons"></script>
+    <style>
+        :root {
+            --background-start: #0a0a1a;
+            --background-end: #1a1a2e;
+            --background-accent: #16213e;
+            --card-background: rgba(255, 255, 255, 0.08);
+            --card-border: rgba(255, 255, 255, 0.15);
+            --text-primary: #ffffff;
+            --text-secondary: #b4b8d1;
+            --success-color: #10b981;
+            --error-color: #ef4444;
+            --accent-color: #6366f1;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Noto Sans TC', 'Inter', sans-serif;
+            color: var(--text-primary);
+            background: linear-gradient(135deg, var(--background-start), var(--background-end), var(--background-accent), #3730a3);
+            background-size: 400% 400%;
+            animation: gradient-flow 20s ease infinite;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        @keyframes gradient-flow {
+            0%, 100% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+        }
+
+        .result-card {
+            width: 100%;
+            max-width: 500px;
+            background: var(--card-background);
+            border: 1px solid var(--card-border);
+            border-radius: 24px;
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+            text-align: center;
+            animation: float-in 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+            opacity: 0;
+        }
+
+        @keyframes float-in {
+            from {
+                opacity: 0;
+                transform: translateY(30px) scale(0.95);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+        }
+
+        .card-content {
+            padding: 48px 40px;
+        }
+
+        .status-icon {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 24px;
+            animation: pulse-glow 2s ease-in-out infinite;
+        }
+
+        .status-icon.success {
+            background: linear-gradient(135deg, var(--success-color), #059669);
+            box-shadow: 0 8px 32px rgba(16, 185, 129, 0.3);
+        }
+
+        .status-icon.error {
+            background: linear-gradient(135deg, var(--error-color), #dc2626);
+            box-shadow: 0 8px 32px rgba(239, 68, 68, 0.3);
+        }
+
+        .status-icon i {
+            width: 40px;
+            height: 40px;
+            color: white;
+        }
+
+        @keyframes pulse-glow {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+
+        .title {
+            font-size: 2rem;
+            font-weight: 700;
+            margin-bottom: 16px;
+        }
+
+        .title.success {
+            color: var(--success-color);
+        }
+
+        .title.error {
+            color: var(--error-color);
+        }
+
+        .message {
+            font-size: 1.1rem;
+            color: var(--text-secondary);
+            margin-bottom: 32px;
+            line-height: 1.6;
+        }
+
+        .user-info {
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 32px;
+            text-align: left;
+        }
+
+        .user-info h3 {
+            color: var(--text-primary);
+            margin-bottom: 12px;
+            font-size: 1.1rem;
+        }
+
+        .user-info p {
+            color: var(--text-secondary);
+            margin-bottom: 8px;
+            font-size: 0.9rem;
+        }
+
+        .action-button {
+            display: inline-block;
+            background: linear-gradient(135deg, var(--accent-color), #4f46e5);
+            color: white;
+            text-decoration: none;
+            padding: 14px 28px;
+            border-radius: 12px;
+            font-weight: 600;
+            font-size: 1rem;
+            transition: all 0.3s ease;
+            border: none;
+            cursor: pointer;
+        }
+
+        .action-button:hover {
+            transform: scale(1.05);
+            box-shadow: 0 8px 32px rgba(99, 102, 241, 0.4);
+        }
+
+        .countdown {
+            margin-top: 20px;
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+
+        @media (max-width: 480px) {
+            .card-content {
+                padding: 32px 24px;
+            }
+            
+            .title {
+                font-size: 1.8rem;
+            }
+            
+            .status-icon {
+                width: 64px;
+                height: 64px;
+            }
+            
+            .status-icon i {
+                width: 32px;
+                height: 32px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="result-card">
+        <div class="card-content">
+            <div class="status-icon {{ 'success' if success else 'error' }}">
+                {% if success %}
+                    <i data-feather="check"></i>
+                {% else %}
+                    <i data-feather="x"></i>
+                {% endif %}
+            </div>
+            
+            <h1 class="title {{ 'success' if success else 'error' }}">{{ title }}</h1>
+            <p class="message">{{ message }}</p>
+            
+            {% if success and user_info %}
+            <div class="user-info">
+                <h3>用戶資訊</h3>
+                <p><strong>姓名：</strong>{{ user_info.real_name }}</p>
+                <p><strong>Email：</strong>{{ user_info.email }}</p>
+                {% if user_info.education_stage %}
+                <p><strong>教育階段：</strong>{{ user_info.education_stage }}</p>
+                {% endif %}
+                <p><strong>註冊時間：</strong>{{ user_info.registered_at[:10] if user_info.registered_at else '未知' }}</p>
+            </div>
+            {% endif %}
+            
+            <a href="{{ redirect_url }}" class="action-button">
+                {% if success %}
+                    繼續使用 HackIt
+                {% else %}
+                    返回登入頁面
+                {% endif %}
+            </a>
+            
+            <div class="countdown">
+                <span id="countdown-text">5 秒後自動跳轉...</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        feather.replace();
+        
+        // Auto redirect after 5 seconds
+        let countdown = 5;
+        const countdownElement = document.getElementById('countdown-text');
+        
+        const timer = setInterval(() => {
+            countdown--;
+            countdownElement.textContent = `${countdown} 秒後自動跳轉...`;
+            
+            if (countdown <= 0) {
+                clearInterval(timer);
+                window.location.href = '{{ redirect_url }}';
+            }
+        }, 1000);
+        
+        // Store access token in localStorage if provided
+        {% if success and access_token %}
+        localStorage.setItem('access_token', '{{ access_token }}');
+        localStorage.setItem('user_info', JSON.stringify({{ user_info | tojson }}));
+        {% endif %}
+    </script>
+</body>
+</html> 
