@@ -8,6 +8,6 @@ passlib[bcrypt]
 fastapi-mail
 Jinja2
 email-validator
-httpx
+httpx 
 cryptography
 authlib 

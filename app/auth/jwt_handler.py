@@ -51,3 +51,7 @@ def extract_email_from_magic_token(token: str) -> Optional[str]:
     if payload:
         return payload.get("email")
     return None 
+
+def decode_access_token(token: str) -> Optional[Dict[str, Any]]:
+    """Decode and verify access token."""
+    return verify_token(token, "access") 

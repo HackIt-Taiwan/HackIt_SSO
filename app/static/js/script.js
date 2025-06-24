@@ -93,7 +93,7 @@ document.addEventListener('DOMContentLoaded', () => {
     async function handleLogout() {
         try {
             logoutBtn.disabled = true;
-            logoutBtn.innerHTML = '<span>登出中...</span>';
+            logoutBtn.innerHTML = '<span>處理中...</span>';
             
             const response = await fetch('/auth/logout', {
                 method: 'POST'
@@ -271,7 +271,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Update button text with countdown
         const updateCountdown = () => {
             magicLinkBtn.innerHTML = `
-                <span>請等待 ${countdown} 秒</span>
+                <span>處理中</span>
                 <i data-feather="clock"></i>
             `;
             feather.replace();
@@ -461,7 +461,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const countdownInterval = setInterval(() => {
             if (countdown > 0) {
                 magicLinkBtn.innerHTML = `
-                    <span>準備中 (${countdown})</span>
+                    <span>處理中</span>
                     <div class="loading-dots">
                         <span></span>
                         <span></span>
@@ -474,7 +474,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 // Change to verification state
                 magicLinkBtn.innerHTML = `
-                    <span>驗證中</span>
+                    <span>處理中</span>
                     <div class="loading-dots">
                         <span></span>
                         <span></span>
@@ -618,7 +618,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Initial loading state - preparing for verification
         magicLinkBtn.innerHTML = `
-            <span>準備中</span>
+            <span>處理中</span>
             <div class="loading-dots">
                 <span></span>
                 <span></span>

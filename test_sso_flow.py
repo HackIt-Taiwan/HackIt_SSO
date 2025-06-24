@@ -14,7 +14,7 @@ def test_sso_flow():
     print("🧪 Testing HackIt SSO Flow")
     print("=" * 50)
     
-    base_url = "http://localhost:8000"
+    base_url = "http://localhost:7411"
     session = requests.Session()
     
     print("\n1️⃣  Testing OIDC Discovery")
@@ -131,7 +131,7 @@ def test_logout_flow():
     print("\n\n🧪 Testing Logout Flow")
     print("=" * 30)
     
-    base_url = "http://localhost:8000"
+    base_url = "http://localhost:7411"
     session = requests.Session()
     
     # Set mock session
@@ -163,4 +163,4 @@ if __name__ == "__main__":
         
     except Exception as e:
         print(f"\n❌ Test failed with error: {e}")
-        print("Please ensure your SSO server is running on localhost:8000") 
+        print("Please ensure your SSO server is running on localhost:7411") 

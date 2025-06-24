@@ -29,6 +29,7 @@ MANIFEST
 # PyInstaller
 #  Usually these files are written by a PyInstaller script; this is just in case
 #  you decide to distribute your app manually.
+*.manifest
 *.spec
 
 # Installer logs
@@ -129,4 +130,19 @@ dmypy.json
 .pytype/
 
 # Cython debug symbols
-cython_debug/ 
+cython_debug/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project specific
+test_sso_flow.py
+*.key
+*.pem 

@@ -106,7 +106,7 @@ class MagicLinkService:
                 "success": True,
                 "message": "Magic link 已發送到您的信箱，請檢查您的郵件（包含垃圾信件夾）。"
             }
-            
+                
         except Exception as e:
             logger.error(f"Error sending magic link to {email}: {str(e)}")
             return {
