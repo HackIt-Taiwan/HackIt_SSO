@@ -229,24 +229,22 @@ async def userinfo_endpoint(credentials: HTTPAuthorizationCredentials = Depends(
 @router.post("/oidc/register")
 async def register_client(
     client: OIDCClient,
-    request: Request,
-    admin_key: Optional[str] = Form(None)
+    request: Request
 ):
     """Register OIDC Client (Admin Only)"""
     try:
-        # Check admin key from form data first, then Authorization header
-        provided_key = admin_key
+        # Get admin key from Authorization header
+        auth_header = request.headers.get("Authorization")
+        provided_key = None
         
-        if not provided_key:
-            auth_header = request.headers.get("Authorization")
-            if auth_header and auth_header.startswith("Bearer "):
-                provided_key = auth_header.split(" ")[1]
+        if auth_header and auth_header.startswith("Bearer "):
+            provided_key = auth_header.split(" ")[1]
         
         # Verify admin key
         if not provided_key or not settings.OIDC_ADMIN_KEY:
             raise HTTPException(
                 status_code=401, 
-                detail="Admin authentication required. Set OIDC_ADMIN_KEY and provide admin_key in request."
+                detail="Admin authentication required. Provide Authorization: Bearer <OIDC_ADMIN_KEY> header."
             )
         
         if provided_key != settings.OIDC_ADMIN_KEY:
