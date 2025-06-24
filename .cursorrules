@@ -92,7 +92,7 @@
 
 - **2025-01-12**  
   - *安全*：整合 Cloudflare Turnstile 隱形驗證防止濫用  
-  - *實作*：Magic Link 先檢查 MongoDB 用戶存在性，避免向不存在用戶發送郵件  
+  - *實作*：Magic Link 先檢查用戶存在性，避免向不存在用戶發送郵件  
   - *架構*：Turnstile 驗證完成後才送出請求，每次送出後自動重新刷新 widget  
   - *結論*：隱形驗證提供良好用戶體驗，同時有效防止機器人攻擊和流量濫用
 
@@ -141,37 +141,37 @@
   - *架構*：create_user_session改用get_user_by_email，完全禁止自動創建用戶  
   - *結論*：系統安全性優於便利性，新用戶需要透過其他管道註冊
 
+- **2025-06-24**  
+  - *重構*：完全移除 MongoDB 直接連接，改用中央化 Database Service API  
+  - *配置*：移除 MONGODB_URI、MONGODB_DATABASE 等舊設定，所有配置提供預設值避免啟動錯誤  
+  - *架構*：所有資料庫操作透過 HTTP API 呼叫，使用 HMAC-SHA256 簽名認證  
+  - *結論*：微服務架構提供更好的擴展性和維護性，避免資料庫直接耦合
+
 # Scratchpad
 
 ## Plan
-- [x] 建立專案基礎架構（FastAPI + MongoDB + Redis）
+- [x] 建立專案基礎架構（FastAPI + Redis + Database Service API）
 - [x] 設計前端登入介面（Apple 風格 + 毛玻璃效果）
 - [x] 實作 Magic Link 完整流程
   - [x] JWT token 生成與驗證
   - [x] Redis 短期 token 儲存
   - [x] 郵件服務整合
-  - [x] 用戶 CRUD 操作
   - [x] 認證路由與驗證頁面
 - [x] 整合安全防護機制
   - [x] Cloudflare Turnstile 隱形驗證
   - [x] 用戶存在性檢查
   - [x] 防止流量濫用
-- [x] 修復 MongoDB 連線問題
-- [x] 修復 Gmail SMTP 設定問題
 - [x] 實作 Magic Link 防濫用機制
 - [x] 實作已登入狀態UI與登出功能
 - [x] 實作企業級SSO跨域認證系統
+- [x] 完全移除 MongoDB 直接連接，改用 Database Service API
+- [x] 更新所有配置檔案為新版本
 - [ ] 測試完整流程
 - [ ] 部署準備
 
 ## Progress
-- 2025-06-12 修復 MongoDB 認證失敗問題，改用標準 mongoengine 連線方式
-- 2025-06-12 修復 Gmail SMTP 設定衝突，調整 SSL/TLS 和 STARTTLS 設定
-- 2025-06-12 實作 Magic Link 防濫用機制：15分鐘內重複請求重發相同 token，超過3次拒絕服務，使用 Redis 追蹤狀態
-- 2025-06-12 改進 Magic Link 使用體驗：允許15分鐘內重複使用、顯示登入IP、改用親切語調
-- 2025-06-12 實作已登入狀態UI：檢測登入狀態、顯示用戶資訊、登出功能，完整的前後端整合
-- 2025-06-12 完成企業級SSO跨域認證系統：軍用級安全機制、完整API文檔、JavaScript SDK
-- 2025-06-12 統一等待狀態文字：將所有倒數、準備中、驗證中等文字統一改為"處理中"
+- 2025-06-24 完全重構為 Database Service API 架構：移除所有 MongoDB 直接連接、更新配置檔案、提供預設值避免啟動錯誤
+- 2025-06-24 更新 Coolify 部署指南：反映新的微服務架構和簡化的環境變數設定
 
 ---
 

@@ -820,10 +820,9 @@ async function csrfProtectedRequest(endpoint, data) {
 DATABASE_SERVICE_URL=http://localhost:8001
 DATABASE_SERVICE_SECRET=your_database_service_secret_key
 
-REDIS_HOST=localhost
-REDIS_PORT=6379
-REDIS_PASSWORD=your_redis_password
-REDIS_DB=0
+REDIS_URL=redis://localhost:6379/0
+# Or with password:
+# REDIS_URL=redis://username:password@localhost:6379/0
 
 # JWT Configuration
 SECRET_KEY=your_super_secret_key_here

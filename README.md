@@ -72,10 +72,9 @@ DATABASE_SERVICE_SECRET=your_secret_key
 
 #### Redis Configuration
 ```bash
-REDIS_HOST=localhost
-REDIS_PORT=6379
-REDIS_PASSWORD=your_password
-REDIS_DB=0
+REDIS_URL=redis://localhost:6379/0
+# Or with password:
+# REDIS_URL=redis://username:password@localhost:6379/0
 ```
 
 #### JWT Settings
