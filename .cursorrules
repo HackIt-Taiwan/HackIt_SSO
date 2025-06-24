@@ -154,6 +154,20 @@
   - *實作*：支援 Authorization header 和 form data 兩種認證方式，含詳細錯誤日誌  
   - *結論*：OIDC 註冊必須有適當的存取控制，避免未授權的客戶端註冊
 
+- **2025-01-12**  
+  - *錯誤*：Magic Link 郵件函數參數不匹配導致 422 錯誤  
+  - *問題*：`send_magic_link_email()` 定義為3個參數但調用時傳了4個參數  
+  - *修正*：在 `send_magic_link_email()` 中新增 `real_name` 參數支援  
+  - *改進*：郵件內容現在顯示用戶真實姓名，提供更個人化的體驗  
+  - *結論*：函數簽名與調用必須一致，參數變更需要同步更新定義和調用
+
+- **2025-06-24**  
+  - *錯誤*：Gmail SMTP 連接超時，port 465 配置問題  
+  - *診斷*：環境變數 MAIL_PORT=465 需要 MAIL_SSL_TLS=true 和 MAIL_STARTTLS=false  
+  - *修正*：改用動態 `get_mail_config()` 確保環境變數正確載入 fastapi-mail  
+  - *工具*：創建 SMTP 診斷工具驗證不同 port 配置 (465/587)  
+  - *結論*：port 465 使用直接 SSL/TLS，port 587 使用 STARTTLS，fastapi-mail 需動態配置
+
 # Scratchpad
 
 ## Plan
