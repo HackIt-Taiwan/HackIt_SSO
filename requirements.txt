@@ -4,6 +4,7 @@ python-dotenv
 redis
 pydantic-settings
 python-jose[cryptography]
+PyJWT
 passlib[bcrypt]
 fastapi-mail
 Jinja2
