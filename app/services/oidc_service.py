@@ -2,6 +2,7 @@ import secrets
 import time
 import jwt
 import json
+import base64
 from typing import Optional, Dict, Any, List
 from datetime import datetime, timedelta
 from cryptography.hazmat.primitives import serialization, hashes
@@ -95,12 +96,19 @@ class OIDCService:
             raise
     
     def get_client(self, client_id: str) -> Optional[OIDCClient]:
-        """Get OIDC client by client_id from environment variable"""
+        """Get OIDC client by client_id from Base64 encoded environment variable"""
         try:
-            # Load clients from environment variable
-            clients_json = settings.OIDC_CLIENTS
-            if not clients_json or clients_json == "[]":
+            # Load clients from Base64 encoded environment variable
+            clients_base64 = settings.OIDC_CLIENTS
+            if not clients_base64 or clients_base64 == "W10=":  # W10= is Base64 for "[]"
                 logger.warning(f"No OIDC clients configured in environment")
+                return None
+            
+            # Decode Base64 to JSON string
+            try:
+                clients_json = base64.b64decode(clients_base64).decode('utf-8')
+            except Exception as e:
+                logger.error(f"Error decoding Base64 OIDC_CLIENTS: {str(e)}")
                 return None
                 
             clients_data = json.loads(clients_json)
@@ -121,15 +129,16 @@ class OIDCService:
             return None
     
     def register_client(self, client: OIDCClient) -> dict:
-        """Register a new OIDC client - returns environment variable for manual addition"""
+        """Register a new OIDC client - returns Base64 encoded environment variable for manual addition"""
         try:
-            # Load existing clients
+            # Load existing clients from Base64
             existing_clients = []
-            clients_json = settings.OIDC_CLIENTS
-            if clients_json and clients_json != "[]":
+            clients_base64 = settings.OIDC_CLIENTS
+            if clients_base64 and clients_base64 != "W10=":  # W10= is Base64 for "[]"
                 try:
+                    clients_json = base64.b64decode(clients_base64).decode('utf-8')
                     existing_clients = json.loads(clients_json)
-                except json.JSONDecodeError:
+                except Exception:
                     logger.warning("Invalid OIDC_CLIENTS format, starting fresh")
                     existing_clients = []
             
@@ -146,15 +155,17 @@ class OIDCService:
             new_client_data = client.model_dump()
             existing_clients.append(new_client_data)
             
-            # Generate new environment variable value
-            new_env_value = json.dumps(existing_clients, separators=(',', ':'))
+            # Generate new environment variable value (Base64 encoded)
+            new_json = json.dumps(existing_clients, separators=(',', ':'))
+            new_base64 = base64.b64encode(new_json.encode('utf-8')).decode('utf-8')
             
             logger.info(f"Generated OIDC client registration for: {client.client_id}")
             return {
                 "success": True,
                 "message": "Client registration prepared",
                 "client_id": client.client_id,
-                "env_variable": f"OIDC_CLIENTS={new_env_value}"
+                "env_variable": f"OIDC_CLIENTS={new_base64}",
+                "json_preview": new_json  # For debugging
             }
             
         except Exception as e:

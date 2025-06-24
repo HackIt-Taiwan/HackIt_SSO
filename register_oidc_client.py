@@ -146,13 +146,18 @@ def main():
         
         # Show environment variable to add
         if result.get("env_variable"):
-            print("\n🔧 環境變數配置")
+            print("\n🔧 環境變數配置 (Base64 編碼)")
             print("=" * 40)
             print("請將以下環境變數添加到您的 .env 文件中：")
             print()
             print(result.get("env_variable"))
             print()
+            if result.get("json_preview"):
+                print("📋 JSON 內容預覽：")
+                print(result.get("json_preview"))
+                print()
             print("⚠️  添加後請重啟 SSO 服務生效！")
+            print("💡 使用 Base64 編碼避免 Coolify 環境變數解析問題")
         
         # Generate configuration for common applications
         print("\n📖 OIDC 配置資訊")
