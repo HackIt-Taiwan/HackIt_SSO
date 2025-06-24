@@ -11,4 +11,5 @@ Jinja2
 email-validator
 httpx 
 cryptography
-authlib 
+authlib
+python-multipart 

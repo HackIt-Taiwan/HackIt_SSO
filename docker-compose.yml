@@ -1,25 +1,16 @@
 services:
-  hackit-sso:
+  hackitsso:
     build: .
-    container_name: hackit-sso
-    restart: unless-stopped
     ports:
-      - "${SSO_PORT:-7411}:7411"
+      - "7411:7411"
     environment:
-      # Database Service API (centralized)
       - DATABASE_SERVICE_URL=${DATABASE_SERVICE_URL:-http://localhost:8001}
       - DATABASE_SERVICE_SECRET=${DATABASE_SERVICE_SECRET}
-      
-      # Redis Settings
       - REDIS_URL=${REDIS_URL:-redis://localhost:6379/0}
-      
-      # JWT Settings
       - SECRET_KEY=${SECRET_KEY}
       - ALGORITHM=${ALGORITHM:-HS256}
       - ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES:-60}
       - MAGIC_LINK_TOKEN_EXPIRE_MINUTES=${MAGIC_LINK_TOKEN_EXPIRE_MINUTES:-15}
-      
-      # Email Settings
       - MAIL_USERNAME=${MAIL_USERNAME:-}
       - MAIL_PASSWORD=${MAIL_PASSWORD:-}
       - MAIL_FROM=${MAIL_FROM:-noreply@hackit.tw}
@@ -30,18 +21,11 @@ services:
       - MAIL_SSL_TLS=${MAIL_SSL_TLS:-false}
       - USE_CREDENTIALS=${USE_CREDENTIALS:-true}
       - VALIDATE_CERTS=${VALIDATE_CERTS:-true}
-      
-      # Turnstile Settings
       - TURNSTILE_SECRET_KEY=${TURNSTILE_SECRET_KEY:-}
       - TURNSTILE_SITE_KEY=${TURNSTILE_SITE_KEY:-}
-      
-      # SSO Settings
       - SSO_DOMAIN=${SSO_DOMAIN:-sso.hackit.tw}
       - ALLOWED_DOMAINS=${ALLOWED_DOMAINS:-hackit.tw,*.hackit.tw}
-      
-      # OIDC Settings
       - OIDC_ISSUER=${OIDC_ISSUER:-https://sso.hackit.tw}
       - OIDC_KEY_ID=${OIDC_KEY_ID:-hackit-sso-key-1}
-      
-      # Environment
-      - ENVIRONMENT=${ENVIRONMENT:-production} 
+      - ENVIRONMENT=${ENVIRONMENT:-prod
+    restart: unless-stopped
