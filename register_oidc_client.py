@@ -164,6 +164,7 @@ def main():
             print(f"OIDC_AUTH_URI={sso_url}/oidc/authorize")
             print(f"OIDC_TOKEN_URI={sso_url}/oidc/token")
             print(f"OIDC_USERINFO_URI={sso_url}/oidc/userinfo")
+            print(f"OIDC_LOGOUT_URI={sso_url}/oidc/endsession")
             print(f"OIDC_DISPLAY_NAME=HackIt SSO")
             print("OIDC_SCOPES=openid profile email")
         

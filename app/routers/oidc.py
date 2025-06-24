@@ -61,7 +61,8 @@ async def oidc_discovery():
         authorization_endpoint=f"{base_url}/oidc/authorize",
         token_endpoint=f"{base_url}/oidc/token",
         userinfo_endpoint=f"{base_url}/oidc/userinfo",
-        jwks_uri=f"{base_url}/oidc/jwks"
+        jwks_uri=f"{base_url}/oidc/jwks",
+        end_session_endpoint=f"{base_url}/oidc/endsession"
     )
 
 @router.get("/oidc/jwks")
@@ -224,6 +225,73 @@ async def userinfo_endpoint(credentials: HTTPAuthorizationCredentials = Depends(
         raise
     except Exception as e:
         logger.error(f"Error in userinfo endpoint: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+@router.get("/oidc/endsession")
+@router.post("/oidc/endsession")
+async def end_session_endpoint(
+    request: Request,
+    id_token_hint: Optional[str] = Query(None),
+    post_logout_redirect_uri: Optional[str] = Query(None),
+    state: Optional[str] = Query(None),
+    client_id: Optional[str] = Query(None)
+):
+    """OIDC End Session Endpoint (RP-Initiated Logout)"""
+    try:
+        # Validate post_logout_redirect_uri if provided
+        if post_logout_redirect_uri and client_id:
+            client = oidc_service.get_client(client_id)
+            if client and post_logout_redirect_uri not in client.redirect_uris:
+                # For logout, we're more lenient - just log warning
+                logger.warning(f"Post-logout redirect URI not in whitelist: {post_logout_redirect_uri}")
+        
+        # Get current session from cookie
+        session_cookie = request.cookies.get("hackit_sso_session")
+        if session_cookie:
+            # Clear the session
+            try:
+                redis_client.delete(f"session:{session_cookie}")
+                logger.info(f"OIDC logout: cleared SSO session {session_cookie}")
+            except Exception as e:
+                logger.error(f"Error clearing session during OIDC logout: {str(e)}")
+        
+        # Prepare redirect response
+        if post_logout_redirect_uri:
+            redirect_url = post_logout_redirect_uri
+            if state:
+                separator = "&" if "?" in redirect_url else "?"
+                redirect_url = f"{redirect_url}{separator}state={state}"
+            
+            # Clear session cookie and redirect
+            response = RedirectResponse(url=redirect_url)
+            response.delete_cookie(
+                key="hackit_sso_session",
+                domain=f".{settings.SSO_DOMAIN}",
+                path="/",
+                secure=True,
+                httponly=True,
+                samesite="lax"
+            )
+            logger.info(f"OIDC logout: redirecting to {post_logout_redirect_uri}")
+            return response
+        else:
+            # No redirect URI provided, show logout confirmation
+            response = JSONResponse({
+                "message": "Logout successful",
+                "logged_out": True
+            })
+            response.delete_cookie(
+                key="hackit_sso_session",
+                domain=f".{settings.SSO_DOMAIN}",
+                path="/",
+                secure=True,
+                httponly=True,
+                samesite="lax"
+            )
+            return response
+            
+    except Exception as e:
+        logger.error(f"Error in OIDC end session endpoint: {str(e)}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
 @router.post("/oidc/register")

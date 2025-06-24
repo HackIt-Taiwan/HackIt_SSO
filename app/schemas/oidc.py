@@ -9,6 +9,7 @@ class OIDCDiscoveryResponse(BaseModel):
     token_endpoint: str
     userinfo_endpoint: str
     jwks_uri: str
+    end_session_endpoint: Optional[str] = None  # OIDC logout endpoint
     scopes_supported: List[str] = ["openid", "profile", "email"]
     response_types_supported: List[str] = ["code", "token", "id_token"]
     response_modes_supported: List[str] = ["query", "fragment", "form_post"]
