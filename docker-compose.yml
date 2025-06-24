@@ -27,5 +27,9 @@ services:
       - ALLOWED_DOMAINS=${ALLOWED_DOMAINS:-hackit.tw,*.hackit.tw}
       - OIDC_ISSUER=${OIDC_ISSUER:-https://sso.hackit.tw}
       - OIDC_KEY_ID=${OIDC_KEY_ID:-hackit-sso-key-1}
-      - ENVIRONMENT=${ENVIRONMENT:-prod
+      - ENVIRONMENT=${ENVIRONMENT:-production}
     restart: unless-stopped
+
+networks:
+  coolify:
+    external: true
