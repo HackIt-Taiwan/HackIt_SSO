@@ -6,12 +6,12 @@ services:
     ports:
       - "${SSO_PORT:-7411}:7411"
     environment:
-      # Database Settings
-      - DATABASE_API_URL=${DATABASE_API_URL}
-      - DATABASE_API_KEY=${DATABASE_API_KEY}
+      # Database Service API (centralized)
+      - DATABASE_SERVICE_URL=${DATABASE_SERVICE_URL:-http://localhost:8001}
+      - DATABASE_SERVICE_SECRET=${DATABASE_SERVICE_SECRET}
       
-      # Redis Settings (外部服務)
-      - REDIS_URL=${REDIS_URL}
+      # Redis Settings
+      - REDIS_URL=${REDIS_URL:-redis://localhost:6379/0}
       
       # JWT Settings
       - SECRET_KEY=${SECRET_KEY}
@@ -20,18 +20,20 @@ services:
       - MAGIC_LINK_TOKEN_EXPIRE_MINUTES=${MAGIC_LINK_TOKEN_EXPIRE_MINUTES:-15}
       
       # Email Settings
-      - MAIL_USERNAME=${MAIL_USERNAME}
-      - MAIL_PASSWORD=${MAIL_PASSWORD}
-      - MAIL_FROM=${MAIL_FROM}
+      - MAIL_USERNAME=${MAIL_USERNAME:-}
+      - MAIL_PASSWORD=${MAIL_PASSWORD:-}
+      - MAIL_FROM=${MAIL_FROM:-noreply@hackit.tw}
       - MAIL_PORT=${MAIL_PORT:-587}
-      - MAIL_SERVER=${MAIL_SERVER}
+      - MAIL_SERVER=${MAIL_SERVER:-smtp.gmail.com}
       - MAIL_FROM_NAME=${MAIL_FROM_NAME:-HackIt SSO}
       - MAIL_STARTTLS=${MAIL_STARTTLS:-true}
       - MAIL_SSL_TLS=${MAIL_SSL_TLS:-false}
+      - USE_CREDENTIALS=${USE_CREDENTIALS:-true}
+      - VALIDATE_CERTS=${VALIDATE_CERTS:-true}
       
       # Turnstile Settings
-      - TURNSTILE_SECRET_KEY=${TURNSTILE_SECRET_KEY}
-      - TURNSTILE_SITE_KEY=${TURNSTILE_SITE_KEY}
+      - TURNSTILE_SECRET_KEY=${TURNSTILE_SECRET_KEY:-}
+      - TURNSTILE_SITE_KEY=${TURNSTILE_SITE_KEY:-}
       
       # SSO Settings
       - SSO_DOMAIN=${SSO_DOMAIN:-sso.hackit.tw}
