@@ -18,14 +18,15 @@ conf = ConnectionConfig(
     VALIDATE_CERTS=settings.VALIDATE_CERTS
 )
 
-async def send_magic_link_email(email: str, magic_link: str, client_ip: str = None) -> bool:
+async def send_magic_link_email(email: str, magic_link: str, real_name: str = None, client_ip: str = None) -> bool:
     """Send magic link email to user's email."""
     try:
-        # Simple and friendly plain text email
+        # Use real name if provided, otherwise use a generic greeting
+        greeting = f"嗨 {real_name}！" if real_name else "嗨！"
         ip_info = f"來自 IP：{client_ip}" if client_ip else "IP 未知"
         
         email_content = f"""
-嗨！這是你的 HackIt 登入連結
+{greeting}這是你的 HackIt 登入連結
 有人（希望是你）想要登入你的帳號，{ip_info}
 點這個連結就能登入：
 {magic_link}
