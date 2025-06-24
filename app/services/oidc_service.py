@@ -4,7 +4,7 @@ import jwt
 import json
 from typing import Optional, Dict, Any, List
 from datetime import datetime, timedelta
-from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives import serialization, hashes
 from cryptography.hazmat.primitives.asymmetric import rsa
 from authlib.integrations.base_client import OAuthError
 from app.core.config import settings
@@ -25,7 +25,30 @@ class OIDCService:
         self.private_key = None
         self.public_key = None
         self.kid = "hackit-sso-key-1"
-        self._generate_or_load_keys()
+        self._keys_initialized = False
+    
+    def _ensure_keys_initialized(self):
+        """Lazy initialization of RSA keys with fallback"""
+        if self._keys_initialized:
+            return
+            
+        try:
+            self._generate_or_load_keys()
+            self._keys_initialized = True
+        except Exception as e:
+            logger.error(f"Error initializing OIDC keys: {str(e)}")
+            # Fallback: generate temporary keys in memory
+            self._generate_temporary_keys()
+            self._keys_initialized = True
+    
+    def _generate_temporary_keys(self):
+        """Generate temporary keys in memory when Redis is unavailable"""
+        logger.warning("Redis unavailable, generating temporary OIDC keys in memory")
+        self.private_key = rsa.generate_private_key(
+            public_exponent=65537,
+            key_size=2048
+        )
+        self.public_key = self.private_key.public_key()
     
     def _generate_or_load_keys(self):
         """Generate or load RSA keys for JWT signing"""
@@ -110,14 +133,18 @@ class OIDCService:
             "created_at": int(time.time())
         }
         
-        # Store code for 10 minutes
-        redis_client.set(
-            f"oidc:auth_code:{code}",
-            json.dumps(code_data),
-            ex=600
-        )
+        try:
+            # Store code for 10 minutes
+            redis_client.set(
+                f"oidc:auth_code:{code}",
+                json.dumps(code_data),
+                ex=600
+            )
+            logger.info(f"Generated authorization code for client {client_id}, user {user_id}")
+        except Exception as e:
+            logger.error(f"Error storing authorization code: {str(e)}")
+            raise
         
-        logger.info(f"Generated authorization code for client {client_id}, user {user_id}")
         return code
     
     async def exchange_code_for_tokens(self, code: str, client_id: str, 
@@ -168,6 +195,8 @@ class OIDCService:
     
     def _generate_access_token(self, user_id: str, client_id: str, scope: str) -> str:
         """Generate access token"""
+        self._ensure_keys_initialized()
+        
         payload = {
             "sub": user_id,
             "aud": client_id,
@@ -182,6 +211,8 @@ class OIDCService:
     
     async def _generate_id_token(self, user_id: str, client_id: str, nonce: Optional[str] = None) -> str:
         """Generate ID token with user information"""
+        self._ensure_keys_initialized()
+        
         from app.crud.user_api import get_user_by_id
         
         try:
@@ -231,17 +262,23 @@ class OIDCService:
             "created_at": int(time.time())
         }
         
-        # Store refresh token for 30 days
-        redis_client.set(
-            f"oidc:refresh_token:{refresh_token}",
-            json.dumps(token_data),
-            ex=86400 * 30
-        )
+        try:
+            # Store refresh token for 30 days
+            redis_client.set(
+                f"oidc:refresh_token:{refresh_token}",
+                json.dumps(token_data),
+                ex=86400 * 30
+            )
+        except Exception as e:
+            logger.error(f"Error storing refresh token: {str(e)}")
+            # Continue without storing - token still generated
         
         return refresh_token
     
     def verify_access_token(self, access_token: str) -> Optional[Dict[str, Any]]:
         """Verify and decode access token"""
+        self._ensure_keys_initialized()
+        
         try:
             payload = jwt.decode(
                 access_token,
@@ -299,6 +336,8 @@ class OIDCService:
     
     def get_jwks(self) -> JWKSet:
         """Get JSON Web Key Set"""
+        self._ensure_keys_initialized()
+        
         try:
             # Get public key numbers
             public_numbers = self.public_key.public_numbers()
@@ -329,8 +368,12 @@ class OIDCService:
                 return None
             
             # Get refresh token data
-            token_data_json = redis_client.get(f"oidc:refresh_token:{refresh_token}")
-            if not token_data_json:
+            try:
+                token_data_json = redis_client.get(f"oidc:refresh_token:{refresh_token}")
+                if not token_data_json:
+                    return None
+            except Exception as e:
+                logger.error(f"Error accessing refresh token from Redis: {str(e)}")
                 return None
             
             token_data = json.loads(token_data_json)
