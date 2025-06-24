@@ -29,6 +29,7 @@ services:
       - OIDC_KEY_ID=${OIDC_KEY_ID:-hackit-sso-key-1}
       - ENVIRONMENT=${ENVIRONMENT:-production}
       - OIDC_ADMIN_KEY=${OIDC_ADMIN_KEY}
+      - OIDC_CLIENTS=${OIDC_CLIENTS}
     restart: unless-stopped
 
 networks:

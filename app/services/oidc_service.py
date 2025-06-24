@@ -95,29 +95,74 @@ class OIDCService:
             raise
     
     def get_client(self, client_id: str) -> Optional[OIDCClient]:
-        """Get OIDC client by client_id"""
+        """Get OIDC client by client_id from environment variable"""
         try:
-            client_data = redis_client.get(f"oidc:client:{client_id}")
-            if client_data:
-                return OIDCClient.model_validate_json(client_data)
+            # Load clients from environment variable
+            clients_json = settings.OIDC_CLIENTS
+            if not clients_json or clients_json == "[]":
+                logger.warning(f"No OIDC clients configured in environment")
+                return None
+                
+            clients_data = json.loads(clients_json)
+            
+            # Find client by ID
+            for client_data in clients_data:
+                if client_data.get("client_id") == client_id:
+                    return OIDCClient(**client_data)
+            
+            logger.warning(f"OIDC client not found: {client_id}")
+            return None
+            
+        except json.JSONDecodeError as e:
+            logger.error(f"Error parsing OIDC_CLIENTS JSON: {str(e)}")
             return None
         except Exception as e:
             logger.error(f"Error getting OIDC client {client_id}: {str(e)}")
             return None
     
-    def register_client(self, client: OIDCClient) -> bool:
-        """Register a new OIDC client"""
+    def register_client(self, client: OIDCClient) -> dict:
+        """Register a new OIDC client - returns environment variable for manual addition"""
         try:
-            redis_client.set(
-                f"oidc:client:{client.client_id}",
-                client.model_dump_json(),
-                ex=86400 * 365  # 1 year expiry
-            )
-            logger.info(f"Registered OIDC client: {client.client_id}")
-            return True
+            # Load existing clients
+            existing_clients = []
+            clients_json = settings.OIDC_CLIENTS
+            if clients_json and clients_json != "[]":
+                try:
+                    existing_clients = json.loads(clients_json)
+                except json.JSONDecodeError:
+                    logger.warning("Invalid OIDC_CLIENTS format, starting fresh")
+                    existing_clients = []
+            
+            # Check if client already exists
+            for existing_client in existing_clients:
+                if existing_client.get("client_id") == client.client_id:
+                    logger.warning(f"OIDC client {client.client_id} already exists")
+                    return {
+                        "success": False,
+                        "message": f"Client '{client.client_id}' already exists in configuration"
+                    }
+            
+            # Add new client
+            new_client_data = client.model_dump()
+            existing_clients.append(new_client_data)
+            
+            # Generate new environment variable value
+            new_env_value = json.dumps(existing_clients, separators=(',', ':'))
+            
+            logger.info(f"Generated OIDC client registration for: {client.client_id}")
+            return {
+                "success": True,
+                "message": "Client registration prepared",
+                "client_id": client.client_id,
+                "env_variable": f"OIDC_CLIENTS={new_env_value}"
+            }
+            
         except Exception as e:
-            logger.error(f"Error registering OIDC client: {str(e)}")
-            return False
+            logger.error(f"Error preparing OIDC client registration: {str(e)}")
+            return {
+                "success": False,
+                "message": f"Error preparing registration: {str(e)}"
+            }
     
     def generate_authorization_code(self, client_id: str, user_id: str, 
                                   redirect_uri: str, scope: str, 

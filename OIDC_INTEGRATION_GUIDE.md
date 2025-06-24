@@ -47,6 +47,7 @@ OIDC_ADMIN_KEY=your-secure-admin-key-here
 | 授權端點 | `https://sso.hackit.tw/oidc/authorize` |
 | 令牌端點 | `https://sso.hackit.tw/oidc/token` |
 | 用戶資訊端點 | `https://sso.hackit.tw/oidc/userinfo` |
+| 登出端點 | `https://sso.hackit.tw/oidc/endsession` |
 | JWKS 端點 | `https://sso.hackit.tw/oidc/jwks` |
 
 ## 📖 OIDC 流程說明
@@ -89,6 +90,7 @@ OIDC_CLIENT_SECRET=your-generated-secret
 OIDC_AUTH_URI=https://sso.hackit.tw/oidc/authorize
 OIDC_TOKEN_URI=https://sso.hackit.tw/oidc/token
 OIDC_USERINFO_URI=https://sso.hackit.tw/oidc/userinfo
+OIDC_LOGOUT_URI=https://sso.hackit.tw/oidc/endsession
 OIDC_DISPLAY_NAME=HackIt SSO
 OIDC_SCOPES=openid profile email
 ```

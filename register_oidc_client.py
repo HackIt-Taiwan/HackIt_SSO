@@ -144,6 +144,16 @@ def main():
         print(f"客戶端密鑰: {client_secret}")
         print("\n⚠️  請妥善保存客戶端密鑰，這是唯一顯示的機會！")
         
+        # Show environment variable to add
+        if result.get("env_variable"):
+            print("\n🔧 環境變數配置")
+            print("=" * 40)
+            print("請將以下環境變數添加到您的 .env 文件中：")
+            print()
+            print(result.get("env_variable"))
+            print()
+            print("⚠️  添加後請重啟 SSO 服務生效！")
+        
         # Generate configuration for common applications
         print("\n📖 OIDC 配置資訊")
         print("-" * 30)

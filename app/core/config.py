@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     OIDC_ISSUER: str = "https://sso.hackit.tw"
     OIDC_KEY_ID: str = "hackit-sso-key-1"
     OIDC_ADMIN_KEY: str = ""  # Admin key for OIDC client registration
+    OIDC_CLIENTS: str = "[]"  # JSON array of OIDC clients
 
     # Mail Settings
     MAIL_USERNAME: str = ""

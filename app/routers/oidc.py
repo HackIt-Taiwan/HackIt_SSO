@@ -320,12 +320,17 @@ async def register_client(
             raise HTTPException(status_code=403, detail="Invalid admin key")
         
         # Register client
-        success = oidc_service.register_client(client)
-        if success:
+        result = oidc_service.register_client(client)
+        if result.get("success"):
             logger.info(f"OIDC client '{client.client_id}' registered by admin from {request.client.host}")
-            return {"message": "Client registered successfully", "client_id": client.client_id}
+            return {
+                "message": result.get("message"),
+                "client_id": client.client_id,
+                "env_variable": result.get("env_variable"),
+                "instructions": "Add the env_variable to your .env file and restart the service"
+            }
         else:
-            raise HTTPException(status_code=500, detail="Failed to register client")
+            raise HTTPException(status_code=400, detail=result.get("message", "Failed to register client"))
     except HTTPException:
         raise
     except Exception as e:
