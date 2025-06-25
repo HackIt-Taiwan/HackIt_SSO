@@ -164,6 +164,12 @@ class TurnstileManager {
             throw new Error('Turnstile element or API not available');
         }
 
+        // Check if already rendered
+        if (this.widget !== null) {
+            console.log('Turnstile already rendered, skipping...');
+            return;
+        }
+
         try {
             this.widget = window.turnstile.render(element, {
                 sitekey: this.config.get('turnstileSiteKey'),
@@ -317,37 +323,63 @@ class UIManager {
 
     setupEventListeners() {
         // Email input focus effects
-        this.elements.emailInput.addEventListener('focus', () => {
-            this.elements.emailInput.parentElement.style.transform = 'scale(1.02)';
-        });
-        
-        this.elements.emailInput.addEventListener('blur', () => {
-            this.elements.emailInput.parentElement.style.transform = 'scale(1)';
-        });
+        if (this.elements.emailInput) {
+            this.elements.emailInput.addEventListener('focus', () => {
+                if (this.elements.emailInput.parentElement) {
+                    this.elements.emailInput.parentElement.style.transform = 'scale(1.02)';
+                }
+            });
+            
+            this.elements.emailInput.addEventListener('blur', () => {
+                if (this.elements.emailInput.parentElement) {
+                    this.elements.emailInput.parentElement.style.transform = 'scale(1)';
+                }
+            });
+        }
     }
 
     showLoginSection() {
-        this.elements.loginSection.style.display = 'block';
-        this.elements.loggedInSection.style.display = 'none';
+        if (this.elements.loginSection) {
+            this.elements.loginSection.style.display = 'block';
+        }
+        if (this.elements.loggedInSection) {
+            this.elements.loggedInSection.style.display = 'none';
+        }
     }
 
     showLoggedInSection(user) {
-        this.elements.loginSection.style.display = 'none';
-        this.elements.loggedInSection.style.display = 'block';
+        if (this.elements.loginSection) {
+            this.elements.loginSection.style.display = 'none';
+        }
+        if (this.elements.loggedInSection) {
+            this.elements.loggedInSection.style.display = 'block';
+        }
         this.updateUserInfo(user);
     }
 
     updateUserInfo(user) {
-        this.elements.userNameEl.textContent = user.real_name || '用戶';
-        this.elements.userEmailEl.textContent = user.email || '';
+        if (this.elements.userNameEl) {
+            this.elements.userNameEl.textContent = user.real_name || '用戶';
+        }
+        if (this.elements.userEmailEl) {
+            this.elements.userEmailEl.textContent = user.email || '';
+        }
         
         if (user.avatar_base64) {
-            this.elements.userAvatarImg.src = `data:image/jpeg;base64,${user.avatar_base64}`;
-            this.elements.userAvatarImg.style.display = 'block';
-            this.elements.userAvatarPlaceholder.style.display = 'none';
+            if (this.elements.userAvatarImg) {
+                this.elements.userAvatarImg.src = `data:image/jpeg;base64,${user.avatar_base64}`;
+                this.elements.userAvatarImg.style.display = 'block';
+            }
+            if (this.elements.userAvatarPlaceholder) {
+                this.elements.userAvatarPlaceholder.style.display = 'none';
+            }
         } else {
-            this.elements.userAvatarImg.style.display = 'none';
-            this.elements.userAvatarPlaceholder.style.display = 'flex';
+            if (this.elements.userAvatarImg) {
+                this.elements.userAvatarImg.style.display = 'none';
+            }
+            if (this.elements.userAvatarPlaceholder) {
+                this.elements.userAvatarPlaceholder.style.display = 'flex';
+            }
         }
     }
 
