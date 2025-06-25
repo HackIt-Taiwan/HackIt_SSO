@@ -46,7 +46,7 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = "production"
     
     # Static Assets Version (for cache busting)
-    STATIC_VERSION: str = "20250625_v3_smart_queue"
+    STATIC_VERSION: str = "20250625_v2"
 
     class Config:
         env_file = ".env"

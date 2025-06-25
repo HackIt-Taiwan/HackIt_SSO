@@ -111,11 +111,6 @@ class TurnstileManager {
         this.retryCount = 0;
         this.maxRetries = 3;
         
-        // Smart queue mechanism for early submissions
-        this.isFullyReady = false;
-        this.pendingSubmissions = [];
-        this.readyCallbacks = [];
-        
         this.setupCallbacks();
     }
 
@@ -130,19 +125,9 @@ class TurnstileManager {
         try {
             await this.waitForApi();
             await this.render();
-            
-            // Mark as fully ready and process any pending submissions
-            this.isFullyReady = true;
-            this.processPendingSubmissions();
-            this.notifyReadyCallbacks();
         } catch (error) {
             console.warn('Turnstile initialization failed, enabling fallback mode:', error);
             this.enableFallback();
-            
-            // Still mark as ready for fallback mode
-            this.isFullyReady = true;
-            this.processPendingSubmissions();
-            this.notifyReadyCallbacks();
         }
     }
 
@@ -154,7 +139,7 @@ class TurnstileManager {
             }
 
             let attempts = 0;
-            const maxAttempts = timeout / 50; // Check every 50ms for faster response
+            const maxAttempts = timeout / 100;
             
             const check = () => {
                 attempts++;
@@ -163,7 +148,7 @@ class TurnstileManager {
                 } else if (attempts >= maxAttempts) {
                     reject(new Error('Turnstile API timeout'));
                 } else {
-                    setTimeout(check, 50);
+                    setTimeout(check, 100);
                 }
             };
             
@@ -216,12 +201,6 @@ class TurnstileManager {
         } else {
             this.enableFallback();
         }
-        
-        if (this.rejectToken) {
-            this.rejectToken(new Error('驗證失敗，請稍後再試'));
-            this.rejectToken = null;
-            this.resolveToken = null;
-        }
     }
 
     onExpired() {
@@ -229,27 +208,22 @@ class TurnstileManager {
         if (this.rejectToken) {
             this.rejectToken(new Error('驗證已過期，請重新嘗試'));
             this.rejectToken = null;
-            this.resolveToken = null;
         }
     }
 
     enableFallback() {
         this.fallbackMode = true;
         this.isReady = true;
-        console.log('⚠️ Turnstile fallback mode enabled');
+        console.log('🔄 Turnstile fallback mode enabled');
+        
+        const element = document.querySelector('.cf-turnstile');
+        if (element) {
+            element.innerHTML = '<small style="color: #ff6b6b; font-size: 12px;">驗證服務暫時無法使用，但您仍可以嘗試發送魔法連結</small>';
+        }
     }
 
-    // Smart token retrieval with queueing support
     async getToken() {
         return new Promise((resolve, reject) => {
-            // If not fully ready yet, queue the request
-            if (!this.isFullyReady) {
-                console.log('📥 Queueing submission request (Turnstile not ready yet)');
-                this.pendingSubmissions.push({ resolve, reject });
-                return;
-            }
-
-            // If in fallback mode, return immediately
             if (this.fallbackMode) {
                 resolve('FALLBACK_TOKEN');
                 return;
@@ -290,41 +264,6 @@ class TurnstileManager {
                 reject(new Error('驗證執行失敗'));
             }
         });
-    }
-
-    // Process any submissions that were queued while initializing
-    processPendingSubmissions() {
-        if (this.pendingSubmissions.length > 0) {
-            console.log(`📤 Processing ${this.pendingSubmissions.length} queued submission(s)`);
-            
-            this.pendingSubmissions.forEach(({ resolve, reject }) => {
-                // Re-call getToken for each queued request
-                this.getToken().then(resolve).catch(reject);
-            });
-            
-            this.pendingSubmissions = [];
-        }
-    }
-
-    // Add callback to be notified when ready
-    onReady(callback) {
-        if (this.isFullyReady) {
-            callback();
-        } else {
-            this.readyCallbacks.push(callback);
-        }
-    }
-
-    // Notify all ready callbacks
-    notifyReadyCallbacks() {
-        this.readyCallbacks.forEach(callback => {
-            try {
-                callback();
-            } catch (error) {
-                console.error('Ready callback error:', error);
-            }
-        });
-        this.readyCallbacks = [];
     }
 
     reset() {
