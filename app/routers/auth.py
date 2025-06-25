@@ -183,11 +183,7 @@ async def logout(request: Request):
 @router.get("/", response_class=HTMLResponse)
 async def login_page(
     request: Request,
-    oidc_client_id: Optional[str] = Query(None),
-    oidc_redirect_uri: Optional[str] = Query(None),
-    oidc_scope: Optional[str] = Query(None),
-    oidc_state: Optional[str] = Query(None),
-    oidc_nonce: Optional[str] = Query(None)
+    oidc_state: Optional[str] = Query(None)
 ):
     """
     Serve the login page with Turnstile configuration and OIDC support.
@@ -196,22 +192,38 @@ async def login_page(
     
     # Prepare OIDC parameters for the template
     oidc_params = None
-    if oidc_client_id:
-        oidc_params = {
-            "client_id": oidc_client_id,
-            "redirect_uri": oidc_redirect_uri,
-            "scope": oidc_scope,
-            "state": oidc_state,
-            "nonce": oidc_nonce
-        }
-        logger.info(f"OIDC login flow initiated for client: {oidc_client_id}")
+    oidc_client_name = None
+    
+    # Load OIDC state from Redis if provided
+    if oidc_state:
+        try:
+            oidc_state_data = redis_client.get(f"oidc_pending:{oidc_state}")
+            if oidc_state_data:
+                oidc_state_info = json.loads(oidc_state_data)
+                oidc_params = oidc_state_info
+                
+                # Get client name for better UX
+                from app.services.oidc_service import OIDCService
+                oidc_service = OIDCService()
+                client = oidc_service.get_client(oidc_state_info["client_id"])
+                if client:
+                    oidc_client_name = client.client_name
+                
+                logger.info(f"OIDC login flow initiated for client: {oidc_state_info['client_id']}")
+            else:
+                logger.warning(f"OIDC state {oidc_state} not found in Redis")
+        except Exception as e:
+            logger.error(f"Error loading OIDC state: {str(e)}")
+            oidc_params = None
     
     return templates.TemplateResponse(
         "index.html",
         {
             "request": request,
             "turnstile_site_key": settings.TURNSTILE_SITE_KEY,
-            "oidc_params": oidc_params
+            "oidc_params": oidc_params,
+            "oidc_client_name": oidc_client_name,
+            "oidc_state_id": oidc_state
         }
     )
 
@@ -251,17 +263,17 @@ async def request_magic_link(request: Request, magic_link_request: MagicLinkRequ
         # Get base URL from request
         base_url = f"{request.url.scheme}://{request.url.netloc}"
         
-        # Extract OIDC parameters from request if present
-        oidc_params = None
-        if hasattr(magic_link_request, 'oidc_params') and magic_link_request.oidc_params:
-            oidc_params = magic_link_request.oidc_params
+        # Extract OIDC state ID from request if present
+        oidc_state_id = None
+        if hasattr(magic_link_request, 'oidc_state_id') and magic_link_request.oidc_state_id:
+            oidc_state_id = magic_link_request.oidc_state_id
         
-        # Send magic link (now includes user existence check, IP info, and OIDC params)
+        # Send magic link (now includes user existence check, IP info, and OIDC state ID)
         result = await MagicLinkService.send_magic_link(
             magic_link_request.email, 
             base_url,
             client_ip,
-            oidc_params
+            oidc_state_id
         )
         
         if result["success"]:
@@ -307,7 +319,7 @@ async def verify_magic_link(request: Request, token: str = Query(...)):
             )
         
         email = token_data.get("email")
-        oidc_params = token_data.get("oidc_params")
+        oidc_state_id = token_data.get("oidc_state_id")
         
         # Create user session
         session_data = await MagicLinkService.create_user_session(email)
@@ -327,52 +339,56 @@ async def verify_magic_link(request: Request, token: str = Query(...)):
         # Create SSO session cookie for seamless future logins
         session_cookie = await create_sso_session(session_data["user_info"])
         
-        # Handle OIDC flow if parameters are present
-        if oidc_params and oidc_params.get("client_id"):
-            from app.services.oidc_service import OIDCService
-            oidc_service = OIDCService()
-            
-            # Generate authorization code for OIDC client
-            auth_code = oidc_service.generate_authorization_code(
-                client_id=oidc_params["client_id"],
-                user_id=session_data["user_info"]["id"],
-                redirect_uri=oidc_params["redirect_uri"],
-                scope=oidc_params.get("scope", "openid"),
-                nonce=oidc_params.get("nonce")
-            )
-            
-            # Redirect back to OIDC client with authorization code
-            redirect_url = f"{oidc_params['redirect_uri']}?code={auth_code}"
-            if oidc_params.get("state"):
-                redirect_url += f"&state={oidc_params['state']}"
-            
-            logger.info(f"OIDC authorization successful, redirecting to: {oidc_params['redirect_uri']}")
-            response = RedirectResponse(url=redirect_url)
-            # Set session cookie for future SSO
-            response.set_cookie(
-                key="hackit_sso_session",
-                value=session_cookie,
-                max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-                httponly=True,
-                secure=True,
-                samesite="lax",
-                domain=".hackit.tw"
-            )
-            return response
+        # Handle OIDC flow if state ID is present
+        if oidc_state_id:
+            try:
+                # Load OIDC state from Redis
+                oidc_state_data = redis_client.get(f"oidc_pending:{oidc_state_id}")
+                if oidc_state_data:
+                    oidc_params = json.loads(oidc_state_data)
+                    
+                    # Clean up the OIDC state from Redis
+                    redis_client.delete(f"oidc_pending:{oidc_state_id}")
+                    
+                    from app.services.oidc_service import OIDCService
+                    oidc_service = OIDCService()
+                    
+                    # Generate authorization code for OIDC client
+                    auth_code = oidc_service.generate_authorization_code(
+                        client_id=oidc_params["client_id"],
+                        user_id=session_data["user_info"]["id"],
+                        redirect_uri=oidc_params["redirect_uri"],
+                        scope=oidc_params.get("scope", "openid"),
+                        nonce=oidc_params.get("nonce")
+                    )
+                    
+                    # Redirect back to OIDC client with authorization code
+                    redirect_url = f"{oidc_params['redirect_uri']}?code={auth_code}"
+                    if oidc_params.get("state"):
+                        redirect_url += f"&state={oidc_params['state']}"
+                    
+                    logger.info(f"OIDC Magic Link authorization successful, redirecting to: {oidc_params['redirect_uri']}")
+                    response = RedirectResponse(url=redirect_url)
+                    # Set session cookie for future SSO
+                    response.set_cookie(
+                        key="hackit_sso_session",
+                        value=session_cookie,
+                        max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+                        httponly=True,
+                        secure=True,
+                        samesite="lax",
+                        domain=".hackit.tw"
+                    )
+                    return response
+                else:
+                    logger.warning(f"OIDC state {oidc_state_id} not found in Redis during verification")
+            except Exception as e:
+                logger.error(f"Error processing OIDC state during verification: {str(e)}")
+                # Continue with regular login flow
         
-        # Regular SSO success - show success page with user info and set session cookie
-        response = templates.TemplateResponse(
-            "auth_result.html",
-            {
-                "request": request,
-                "success": True,
-                "title": "登入成功！",
-                "message": f"歡迎回來，{session_data['user_info']['real_name']}！",
-                "user_info": session_data['user_info'],
-                "access_token": session_data['access_token'],
-                "redirect_url": "/dashboard"  # 可以改為實際的儀表板 URL
-            }
-        )
+        # Regular SSO success - redirect directly to SSO home page
+        logger.info(f"Regular Magic Link verification successful for {session_data['user_info']['email']}, redirecting to SSO home")
+        response = RedirectResponse(url="/")
         
         # Set session cookie for future SSO
         response.set_cookie(

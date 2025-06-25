@@ -12,7 +12,7 @@ class OIDCParams(BaseModel):
 class MagicLinkRequest(BaseModel):
     email: EmailStr
     turnstile_token: str
-    oidc_params: Optional[OIDCParams] = None
+    oidc_state_id: Optional[str] = None
 
 class MagicLinkResponse(BaseModel):
     message: str

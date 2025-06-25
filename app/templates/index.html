@@ -25,6 +25,14 @@
                         </div>
                         <h1 class="title">HackIt</h1>
                     </div>
+                    {% if oidc_client_name %}
+                    <div class="oidc-login-info">
+                        <p class="oidc-message">
+                            <i data-feather="arrow-left-circle"></i>
+                            您正在為 <strong>{{ oidc_client_name }}</strong> 進行登入
+                        </p>
+                    </div>
+                    {% endif %}
                     <p class="subtitle">改變世界的起點，由你創造</p>
                     <form id="login-form">
                         <div class="input-group">
@@ -42,6 +50,36 @@
                         <!-- Turnstile configuration -->
                         <script>
                             window.TURNSTILE_SITE_KEY = '{{ turnstile_site_key }}';
+                            // OIDC state ID if available
+                            {% if oidc_state_id %}
+                            window.oidcStateId = '{{ oidc_state_id }}';
+                            {% endif %}
+                            
+                            // Check for logout success message
+                            document.addEventListener('DOMContentLoaded', () => {
+                                const urlParams = new URLSearchParams(window.location.search);
+                                if (urlParams.get('logout') === 'success') {
+                                    // Show logout success message
+                                    const messageEl = document.getElementById('response-message');
+                                    if (messageEl) {
+                                        messageEl.innerHTML = '<span class="message-text">登出成功！</span>';
+                                        messageEl.className = 'success show';
+                                        
+                                        // Auto hide after 3 seconds
+                                        setTimeout(() => {
+                                            messageEl.classList.remove('show');
+                                            setTimeout(() => {
+                                                messageEl.textContent = '';
+                                                messageEl.className = '';
+                                            }, 400);
+                                        }, 3000);
+                                    }
+                                    
+                                    // Clean URL
+                                    const newUrl = window.location.protocol + "//" + window.location.host + window.location.pathname;
+                                    window.history.replaceState({path: newUrl}, '', newUrl);
+                                }
+                            });
                         </script>
                         <button type="submit" class="magic-link-btn">
                             <span>發送魔法連結</span>

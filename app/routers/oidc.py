@@ -5,6 +5,8 @@ from typing import Optional, Dict, Any
 import base64
 import logging
 import json
+import time
+import secrets
 
 from app.services.oidc_service import OIDCService
 from app.schemas.oidc import (
@@ -120,21 +122,35 @@ async def authorization_endpoint(
                 logger.info(f"OIDC seamless login: redirecting to {redirect_uri}")
                 return RedirectResponse(url=redirect_url)
         
-        # User not authenticated, redirect to SSO login
-        sso_login_url = f"{settings.OIDC_ISSUER}/auth/"
-        sso_params = {
-            "oidc_client_id": client_id,
-            "oidc_redirect_uri": redirect_uri,
-            "oidc_scope": scope,
-            "oidc_state": state,
-            "oidc_nonce": nonce
+        # User not authenticated, save OIDC state to Redis and redirect to SSO login
+        oidc_state_id = secrets.token_urlsafe(32)
+        
+        oidc_state_data = {
+            "client_id": client_id,
+            "redirect_uri": redirect_uri,
+            "scope": scope,
+            "state": state,
+            "nonce": nonce,
+            "response_type": response_type,
+            "created_at": int(time.time())
         }
         
-        # Build login URL with OIDC parameters
-        params_str = "&".join([f"{k}={v}" for k, v in sso_params.items() if v])
-        full_login_url = f"{sso_login_url}?{params_str}"
+        # Store OIDC state in Redis for 15 minutes
+        try:
+            redis_client.set(
+                f"oidc_pending:{oidc_state_id}",
+                json.dumps(oidc_state_data),
+                ex=900  # 15 minutes
+            )
+            logger.info(f"Saved OIDC state {oidc_state_id} for client {client_id}")
+        except Exception as e:
+            logger.error(f"Error saving OIDC state: {str(e)}")
+            # Fallback to current behavior if Redis fails
+            
+        # Redirect to SSO login with OIDC state ID
+        sso_login_url = f"{settings.OIDC_ISSUER}/auth/?oidc_state={oidc_state_id}"
         
-        return RedirectResponse(url=full_login_url)
+        return RedirectResponse(url=sso_login_url)
         
     except HTTPException:
         raise
@@ -275,11 +291,9 @@ async def end_session_endpoint(
             logger.info(f"OIDC logout: redirecting to {post_logout_redirect_uri}")
             return response
         else:
-            # No redirect URI provided, show logout confirmation
-            response = JSONResponse({
-                "message": "Logout successful",
-                "logged_out": True
-            })
+            # No redirect URI provided, redirect to SSO home with logout success message
+            sso_home_url = f"{settings.OIDC_ISSUER}/?logout=success"
+            response = RedirectResponse(url=sso_home_url)
             response.delete_cookie(
                 key="hackit_sso_session",
                 domain=f".{settings.SSO_DOMAIN}",
@@ -288,6 +302,7 @@ async def end_session_endpoint(
                 httponly=True,
                 samesite="lax"
             )
+            logger.info(f"OIDC logout: redirecting to SSO home with logout success")
             return response
             
     except Exception as e:

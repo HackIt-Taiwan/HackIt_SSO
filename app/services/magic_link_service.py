@@ -18,7 +18,7 @@ class MagicLinkService:
         return secrets.token_urlsafe(32)
     
     @staticmethod
-    async def send_magic_link(email: str, base_url: str = "http://localhost:8000", client_ip: str = None, oidc_params: dict = None) -> dict:
+    async def send_magic_link(email: str, base_url: str = "http://localhost:8000", client_ip: str = None, oidc_state_id: str = None) -> dict:
         """Generate and send magic link to user's email."""
         try:
             # First check if user exists in database service
@@ -75,12 +75,12 @@ class MagicLinkService:
                 
                 logger.info(f"Generated new magic token for {email}")
             
-            # Store the magic token in Redis with email, timestamp, and OIDC params
+            # Store the magic token in Redis with email, timestamp, and OIDC state ID
             magic_link_data = {
                 "email": email,
                 "timestamp": str(uuid.uuid4()),  # Unique identifier for this link
                 "ip": client_ip,
-                "oidc_params": oidc_params  # Store OIDC parameters for callback
+                "oidc_state_id": oidc_state_id  # Store OIDC state ID for callback
             }
             
             # Store magic link data as JSON string for OIDC support
@@ -136,7 +136,7 @@ class MagicLinkService:
                 if len(parts) >= 1:
                     email = parts[0]
                     logger.info(f"Magic token verified for {email} (legacy format)")
-                    return {"email": email, "oidc_params": None}
+                    return {"email": email, "oidc_state_id": None}
                 else:
                     logger.error(f"Invalid token data format: {token_data}")
                     return None

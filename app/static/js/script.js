@@ -524,15 +524,24 @@ document.addEventListener('DOMContentLoaded', () => {
         console.log('🔄 Step 3: Token captured and cleared for submission');
 
         try {
+            // Get OIDC state ID from template if available
+            const oidcStateId = window.oidcStateId || null;
+            
+            const requestBody = { 
+                email: email,
+                turnstile_token: tokenToUse
+            };
+            
+            if (oidcStateId) {
+                requestBody.oidc_state_id = oidcStateId;
+            }
+
             const response = await fetch('/auth/magic-link', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({ 
-                    email: email,
-                    turnstile_token: tokenToUse
-                }),
+                body: JSON.stringify(requestBody),
             });
 
             const data = await response.json();
