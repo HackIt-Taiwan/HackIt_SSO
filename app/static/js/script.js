@@ -336,8 +336,8 @@ class UIManager {
         this.elements.userNameEl.textContent = user.real_name || '用戶';
         this.elements.userEmailEl.textContent = user.email || '';
         
-        if (user.avatar_base64) {
-            this.elements.userAvatarImg.src = `data:image/jpeg;base64,${user.avatar_base64}`;
+        if (user.avatar_url) {
+            this.elements.userAvatarImg.src = user.avatar_url;
             this.elements.userAvatarImg.style.display = 'block';
             this.elements.userAvatarPlaceholder.style.display = 'none';
         } else {

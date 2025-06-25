@@ -222,6 +222,15 @@
   - *架構*：登入頁面支援雙狀態 - 未登入顯示登入表單，已登入顯示用戶資訊  
   - *結論*：SSO 系統應提供一致的全域登入體驗，避免用戶重複驗證
 
+- **2025-01-12**  
+  - *重構*：全面實作 Database API 頭像 URL 系統，完全取代 Base64 傳輸  
+  - *架構*：所有頭像輸出統一使用 `/users/{user_id}/avatar` API 端點  
+  - *OIDC*：ID Token 和 UserInfo 端點現在提供頭像 URL 而非 Base64 數據  
+  - *前端*：JavaScript 和模板更新為處理 avatar_url 而非 avatar_base64  
+  - *優化*：利用 Database API 的 HTTP 緩存、ETag 和 CDN 優化提升性能  
+  - *SDK*：HackIt SSO SDK 新增 getUserAvatarUrl() 方法支援頭像 URL  
+  - *結論*：統一頭像 URL 系統提供更好的性能、緩存和 CDN 支援，符合現代 Web 標準
+
 # Scratchpad
 
 ## Plan

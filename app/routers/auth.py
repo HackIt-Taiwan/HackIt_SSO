@@ -36,7 +36,7 @@ class SSOUserInfo(BaseModel):
     email: str
     real_name: str
     guild_id: int
-    avatar_base64: Optional[str] = None
+    avatar_url: Optional[str] = None
     education_stage: Optional[str] = None
     source: Optional[str] = None
 
@@ -93,6 +93,10 @@ async def create_sso_session(user_info: dict) -> str:
         # Generate session ID
         session_id = secrets.token_urlsafe(32)
         
+        # Generate avatar URL using Database API
+        from app.core.config import get_avatar_url
+        avatar_url = get_avatar_url(user_info["id"])
+        
         # Prepare session data
         session_data = {
             "user_id": user_info["id"],
@@ -100,7 +104,7 @@ async def create_sso_session(user_info: dict) -> str:
             "real_name": user_info["real_name"],
             "user_id_field": user_info["user_id"],
             "guild_id": user_info["guild_id"],
-            "avatar_base64": user_info.get("avatar_base64"),
+            "avatar_url": avatar_url,
             "created_at": int(time.time()),
             "expires_at": int(time.time()) + (settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60)
         }
@@ -135,15 +139,20 @@ def get_current_user_from_token(credentials: HTTPAuthorizationCredentials = Depe
 async def check_auth_status(request: Request, current_user = Depends(get_current_user_from_token)):
     """Check if user is authenticated and return user info."""
     if current_user:
+        # Generate avatar URL using Database API
+        from app.core.config import get_avatar_url
+        user_id = current_user.get("sub")
+        avatar_url = get_avatar_url(user_id) if user_id else None
+        
         return {
             "authenticated": True,
             "user": {
-                "id": current_user.get("sub"),
+                "id": user_id,
                 "email": current_user.get("email"),
                 "real_name": current_user.get("real_name"),
                 "user_id": current_user.get("user_id"),
                 "guild_id": current_user.get("guild_id"),
-                "avatar_base64": current_user.get("avatar_base64")
+                "avatar_url": avatar_url
             }
         }
     else:
@@ -574,13 +583,18 @@ async def sso_verify_token(request: Request, sso_request: SSOTokenRequest):
                 detail="Invalid token"
             )
         
+        # Generate avatar URL using Database API
+        from app.core.config import get_avatar_url
+        user_id = payload.get("sub", "")
+        avatar_url = get_avatar_url(user_id) if user_id else None
+        
         # Create sanitized user info (privacy-focused)
         user_info = SSOUserInfo(
-            user_id=payload.get("sub", ""),
+            user_id=user_id,
             email=payload.get("email", ""),
             real_name=payload.get("real_name", ""),
             guild_id=payload.get("guild_id", 0),
-            avatar_base64=payload.get("avatar_base64"),
+            avatar_url=avatar_url,
             education_stage=payload.get("education_stage"),
             source=payload.get("source")
         )
@@ -646,14 +660,19 @@ async def sso_refresh_token(
             detail="Authentication required"
         )
     
+    # Generate avatar URL using Database API
+    from app.core.config import get_avatar_url
+    user_id = current_user.get("sub")
+    avatar_url = get_avatar_url(user_id) if user_id else None
+    
     # Create new token with refreshed expiration
     new_token_data = {
-        "sub": current_user.get("sub"),
+        "sub": user_id,
         "email": current_user.get("email"),
         "real_name": current_user.get("real_name"),
         "user_id": current_user.get("user_id"),
         "guild_id": current_user.get("guild_id"),
-        "avatar_base64": current_user.get("avatar_base64")
+        "avatar_url": avatar_url
     }
     
     from app.auth.jwt_handler import create_access_token

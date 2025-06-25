@@ -158,6 +158,10 @@ class MagicLinkService:
             # Update login info using database API
             await update_user_login_info(user['id'], "magic_link")
             
+            # Generate avatar URL using Database API
+            from app.core.config import get_avatar_url
+            avatar_url = get_avatar_url(user['id'])
+            
             # Create access token with complete user info
             token_data = {
                 "sub": user['id'],
@@ -165,7 +169,7 @@ class MagicLinkService:
                 "real_name": user['real_name'],
                 "user_id": user['user_id'],
                 "guild_id": user['guild_id'],
-                "avatar_base64": user.get('avatar_base64')
+                "avatar_url": avatar_url
             }
             access_token = create_access_token(token_data)
             
@@ -179,7 +183,7 @@ class MagicLinkService:
                     "real_name": user['real_name'],
                     "user_id": user['user_id'],
                     "guild_id": user['guild_id'],
-                    "avatar_base64": user.get('avatar_base64'),
+                    "avatar_url": avatar_url,
                     "source": user.get('source'),
                     "education_stage": user.get('education_stage'),
                     "registered_at": user.get('registered_at')

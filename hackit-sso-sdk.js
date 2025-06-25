@@ -261,6 +261,13 @@ class HackItSSO {
     }
     
     /**
+     * 獲取用戶頭像 URL
+     */
+    getUserAvatarUrl() {
+        return this.user ? this.user.avatar_url : null;
+    }
+    
+    /**
      * 獲取 token
      */
     getToken() {

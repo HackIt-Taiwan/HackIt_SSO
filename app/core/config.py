@@ -52,4 +52,8 @@ class Settings(BaseSettings):
         env_file = ".env"
         extra = "ignore"
 
-settings = Settings() 
+settings = Settings()
+
+def get_avatar_url(user_id: str) -> str:
+    """Generate Database API avatar URL for a user."""
+    return f"{settings.DATABASE_SERVICE_URL}/users/{user_id}/avatar" 
