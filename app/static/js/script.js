@@ -653,6 +653,11 @@ class SSOApp {
     }
 
     setupFormHandling() {
+        if (!this.ui.elements.loginForm) {
+            console.log('Login form not found, skipping form handling setup');
+            return;
+        }
+        
         this.ui.elements.loginForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             
@@ -661,7 +666,7 @@ class SSOApp {
                 return;
             }
             
-            const email = this.ui.elements.emailInput.value.trim();
+            const email = this.ui.elements.emailInput?.value?.trim();
             if (!email) {
                 this.ui.showMessage('請輸入有效的電子郵件地址', 'error');
                 return;
@@ -687,18 +692,25 @@ class SSOApp {
         this.pendingSubmission = null;
         
         // Set the email back to the input and submit
-        this.ui.elements.emailInput.value = email;
-        await this.handleFormSubmit();
+        if (this.ui.elements.emailInput) {
+            this.ui.elements.emailInput.value = email;
+            await this.handleFormSubmit();
+        }
     }
 
     setupLogoutHandling() {
+        if (!this.ui.elements.logoutBtn) {
+            console.log('Logout button not found, skipping logout handling setup');
+            return;
+        }
+        
         this.ui.elements.logoutBtn.addEventListener('click', () => {
             this.auth.logout();
         });
     }
 
     async handleFormSubmit() {
-        const email = this.ui.elements.emailInput.value.trim();
+        const email = this.ui.elements.emailInput?.value?.trim();
         if (!email) {
             this.ui.showMessage('請輸入有效的電子郵件地址', 'error');
             return;
@@ -724,7 +736,7 @@ class SSOApp {
                 this.config.get('oidcStateId')
             );
             
-            if (success) {
+            if (success && this.ui.elements.emailInput) {
                 this.ui.elements.emailInput.value = '';
             }
             
