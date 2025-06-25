@@ -576,6 +576,22 @@ body {
     z-index: 1;
 }
 
+.social-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    color: var(--text-secondary);
+}
+
+.social-btn:disabled:hover {
+    transform: none;
+    border-color: var(--card-border);
+    box-shadow: none;
+}
+
+.social-btn:disabled::before {
+    display: none;
+}
+
 #response-message {
     margin-top: 20px;
     font-size: 0.9rem;

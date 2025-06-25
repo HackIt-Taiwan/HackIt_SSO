@@ -1,739 +1,658 @@
-document.addEventListener('DOMContentLoaded', () => {
-    const loginForm = document.getElementById('login-form');
-    const emailInput = document.getElementById('email');
-    const responseMessage = document.getElementById('response-message');
-    const magicLinkBtn = loginForm.querySelector('.magic-link-btn');
-    
-    // UI sections
-    const loginSection = document.getElementById('login-section');
-    const loggedInSection = document.getElementById('logged-in-section');
-    
-    // User info elements
-    const userNameEl = document.getElementById('user-name');
-    const userEmailEl = document.getElementById('user-email');
-    const userAvatarImg = document.getElementById('user-avatar-img');
-    const userAvatarPlaceholder = document.getElementById('user-avatar-placeholder');
-    const logoutBtn = document.getElementById('logout-btn');
-    const logoutMessage = document.getElementById('logout-message');
-    
-    // Check authentication status on page load
-    checkAuthStatus();
-    
-    // Allow button to be clickable immediately, but delay actual submission
-    magicLinkBtn.disabled = false;
-    console.log('Page loaded, button enabled for immediate interaction');
-    
-    let turnstileToken = null;
-    let turnstileWidgetId = null;
-    let isSubmitting = false;
-    let isExecuting = false;
-    let isButtonLocked = false;
-    let isTurnstileReady = false;
-    let verificationTimeout = null;
-    let isWaitingForTurnstile = false;
+/**
+ * HackIt SSO - Clean and Maintainable Frontend Architecture
+ * 
+ * This file contains a modular, clean implementation of the SSO frontend.
+ * All global state has been eliminated and proper error handling is implemented.
+ */
 
-    // Authentication functions
-    async function checkAuthStatus() {
+/* ==============================================
+   CONFIGURATION MANAGER
+   ============================================== */
+class ConfigManager {
+    constructor() {
+        this.config = this.loadConfig();
+    }
+
+    loadConfig() {
+        // Load configuration from data attributes
+        const turnstileElement = document.querySelector('.cf-turnstile');
+        if (!turnstileElement) {
+            console.warn('Turnstile element not found');
+            return {};
+        }
+
+        return {
+            turnstileSiteKey: turnstileElement.getAttribute('data-sitekey') || '',
+            oidcStateId: turnstileElement.getAttribute('data-oidc-state-id') || null,
+            staticVersion: turnstileElement.getAttribute('data-static-version') || '1.0.0'
+        };
+    }
+
+    get(key) {
+        return this.config[key];
+    }
+}
+
+/* ==============================================
+   API CLIENT
+   ============================================== */
+class ApiClient {
+    constructor() {
+        this.baseUrl = this.detectBaseUrl();
+    }
+
+    detectBaseUrl() {
+        const hostname = window.location.hostname;
+        if (hostname === 'localhost' || hostname === '127.0.0.1') {
+            const port = window.location.port || '8000';
+            return `${window.location.protocol}//${hostname}:${port}`;
+        }
+        return `${window.location.protocol}//${window.location.host}`;
+    }
+
+    async request(endpoint, options = {}) {
+        const url = `${this.baseUrl}${endpoint}`;
+        const config = {
+            headers: {
+                'Content-Type': 'application/json',
+                ...options.headers
+            },
+            ...options
+        };
+
         try {
-            const token = localStorage.getItem('access_token');
-            if (!token) {
-                showLoginSection();
+            const response = await fetch(url, config);
+            const data = await response.json();
+            
+            if (!response.ok) {
+                throw new Error(data.detail || `HTTP ${response.status}`);
+            }
+            
+            return { success: true, data };
+        } catch (error) {
+            console.error(`API request failed: ${endpoint}`, error);
+            return { 
+                success: false, 
+                error: error.message || 'Network error occurred'
+            };
+        }
+    }
+
+    async checkAuthStatus(token) {
+        return this.request('/auth/status', {
+            headers: { Authorization: `Bearer ${token}` }
+        });
+    }
+
+    async sendMagicLink(email, turnstileToken, oidcStateId = null) {
+        const body = { email, turnstile_token: turnstileToken };
+        if (oidcStateId) body.oidc_state_id = oidcStateId;
+
+        return this.request('/auth/magic-link', {
+            method: 'POST',
+            body: JSON.stringify(body)
+        });
+    }
+
+    async logout() {
+        return this.request('/auth/logout', { method: 'POST' });
+    }
+}
+
+/* ==============================================
+   TURNSTILE MANAGER
+   ============================================== */
+class TurnstileManager {
+    constructor(config) {
+        this.config = config;
+        this.widget = null;
+        this.isReady = false;
+        this.fallbackMode = false;
+        this.retryCount = 0;
+        this.maxRetries = 3;
+        
+        this.setupCallbacks();
+    }
+
+    setupCallbacks() {
+        window.onTurnstileLoad = () => this.onApiReady();
+        window.onTurnstileSuccess = (token) => this.onSuccess(token);
+        window.onTurnstileError = (error) => this.onError(error);
+        window.onTurnstileExpired = () => this.onExpired();
+    }
+
+    async initialize() {
+        try {
+            await this.waitForApi();
+            await this.render();
+        } catch (error) {
+            console.warn('Turnstile initialization failed, enabling fallback mode:', error);
+            this.enableFallback();
+        }
+    }
+
+    async waitForApi(timeout = 10000) {
+        return new Promise((resolve, reject) => {
+            if (window.turnstile) {
+                resolve();
                 return;
             }
 
-            const response = await fetch('/auth/status', {
-                headers: {
-                    'Authorization': `Bearer ${token}`
-                }
-            });
-
-            if (response.ok) {
-                const data = await response.json();
-                if (data.authenticated) {
-                    showLoggedInSection(data.user);
+            let attempts = 0;
+            const maxAttempts = timeout / 100;
+            
+            const check = () => {
+                attempts++;
+                if (window.turnstile) {
+                    resolve();
+                } else if (attempts >= maxAttempts) {
+                    reject(new Error('Turnstile API timeout'));
                 } else {
-                    localStorage.removeItem('access_token');
-                    showLoginSection();
+                    setTimeout(check, 100);
                 }
-            } else {
-                localStorage.removeItem('access_token');
-                showLoginSection();
-            }
-        } catch (error) {
-            console.error('Error checking auth status:', error);
-            showLoginSection();
-        }
-    }
-
-    function showLoginSection() {
-        loginSection.style.display = 'block';
-        loggedInSection.style.display = 'none';
-    }
-
-    function showLoggedInSection(user) {
-        loginSection.style.display = 'none';
-        loggedInSection.style.display = 'block';
-        
-        // Update user info
-        userNameEl.textContent = user.real_name || '用戶';
-        userEmailEl.textContent = user.email || '';
-        
-        // Handle avatar
-        if (user.avatar_base64) {
-            userAvatarImg.src = `data:image/jpeg;base64,${user.avatar_base64}`;
-            userAvatarImg.style.display = 'block';
-            userAvatarPlaceholder.style.display = 'none';
-        } else {
-            userAvatarImg.style.display = 'none';
-            userAvatarPlaceholder.style.display = 'flex';
-        }
-    }
-
-    // Logout function
-    async function handleLogout() {
-        try {
-            logoutBtn.disabled = true;
-            logoutBtn.innerHTML = '<span>處理中...</span>';
+            };
             
-            const response = await fetch('/auth/logout', {
-                method: 'POST'
+            check();
+        });
+    }
+
+    async render() {
+        const element = document.querySelector('.cf-turnstile');
+        if (!element || !window.turnstile) {
+            throw new Error('Turnstile element or API not available');
+        }
+
+        try {
+            this.widget = window.turnstile.render(element, {
+                sitekey: this.config.get('turnstileSiteKey'),
+                callback: 'onTurnstileSuccess',
+                'error-callback': 'onTurnstileError',
+                'expired-callback': 'onTurnstileExpired',
+                theme: 'dark',
+                size: 'invisible'
             });
             
-            if (response.ok) {
-                localStorage.removeItem('access_token');
-                showLogoutMessage('登出成功！', 'success');
-                
-                setTimeout(() => {
-                    showLoginSection();
-                    hideLogoutMessage();
-                }, 1500);
-            } else {
-                showLogoutMessage('登出失敗，請重試', 'error');
-            }
+            this.isReady = true;
+            console.log('✅ Turnstile widget ready');
         } catch (error) {
-            console.error('Logout error:', error);
-            showLogoutMessage('網路錯誤，請重試', 'error');
-        } finally {
-            logoutBtn.disabled = false;
-            logoutBtn.innerHTML = '<i data-feather="log-out"></i><span>登出</span>';
-            feather.replace();
+            console.error('Turnstile render failed:', error);
+            throw error;
         }
     }
-    
-    function showLogoutMessage(text, type) {
-        logoutMessage.textContent = text;
-        logoutMessage.className = `${type} show`;
-    }
-    
-    function hideLogoutMessage() {
-        logoutMessage.classList.remove('show');
-        setTimeout(() => {
-            logoutMessage.textContent = '';
-            logoutMessage.className = '';
-        }, 300);
-    }
-    
-    // Logout button event listener
-    logoutBtn.addEventListener('click', handleLogout);
 
-    // Function to show message with animation
-    function showMessage(text, type) {
-        responseMessage.innerHTML = `<span class="message-text">${text}</span>`;
-        responseMessage.className = `${type} show`;
+    onApiReady() {
+        console.log('Turnstile API loaded');
+    }
+
+    onSuccess(token) {
+        console.log('✅ Turnstile verification successful');
+        if (this.resolveToken) {
+            this.resolveToken(token);
+            this.resolveToken = null;
+        }
+    }
+
+    onError(error) {
+        console.error('❌ Turnstile error:', error);
+        if (this.retryCount < this.maxRetries) {
+            this.retryCount++;
+            console.log(`Retrying Turnstile (${this.retryCount}/${this.maxRetries})`);
+            setTimeout(() => this.render().catch(() => this.enableFallback()), 2000);
+        } else {
+            this.enableFallback();
+        }
+    }
+
+    onExpired() {
+        console.log('⏰ Turnstile token expired');
+        if (this.rejectToken) {
+            this.rejectToken(new Error('驗證已過期，請重新嘗試'));
+            this.rejectToken = null;
+        }
+    }
+
+    enableFallback() {
+        this.fallbackMode = true;
+        this.isReady = true;
+        console.log('🔄 Turnstile fallback mode enabled');
         
-        // Auto hide after 5 seconds
-        setTimeout(() => {
-            hideMessage();
-        }, 5000);
+        const element = document.querySelector('.cf-turnstile');
+        if (element) {
+            element.innerHTML = '<small style="color: #ff6b6b; font-size: 12px;">驗證服務暫時無法使用，但您仍可以嘗試發送魔法連結</small>';
+        }
     }
 
-    // Function to hide message with animation
-    function hideMessage() {
-        responseMessage.classList.remove('show');
+    async getToken() {
+        return new Promise((resolve, reject) => {
+            if (this.fallbackMode) {
+                resolve('FALLBACK_TOKEN');
+                return;
+            }
+
+            if (!this.isReady || !this.widget) {
+                reject(new Error('Turnstile not ready'));
+                return;
+            }
+
+            // Check for existing token
+            try {
+                const existingToken = window.turnstile.getResponse(this.widget);
+                if (existingToken && existingToken.trim()) {
+                    resolve(existingToken);
+                    return;
+                }
+            } catch (error) {
+                console.log('No existing token available');
+            }
+
+            // Execute new verification
+            this.resolveToken = resolve;
+            this.rejectToken = reject;
+
+            try {
+                window.turnstile.execute(this.widget);
+                
+                // Timeout protection
+                setTimeout(() => {
+                    if (this.resolveToken) {
+                        this.rejectToken(new Error('驗證超時，請重新嘗試'));
+                        this.resolveToken = null;
+                        this.rejectToken = null;
+                    }
+                }, 30000);
+            } catch (error) {
+                reject(new Error('驗證執行失敗'));
+            }
+        });
+    }
+
+    reset() {
+        if (this.isReady && this.widget && window.turnstile && !this.fallbackMode) {
+            try {
+                window.turnstile.reset(this.widget);
+            } catch (error) {
+                console.error('Turnstile reset failed:', error);
+            }
+        }
+    }
+}
+
+/* ==============================================
+   UI MANAGER
+   ============================================== */
+class UIManager {
+    constructor() {
+        this.elements = this.initializeElements();
+        this.setupEventListeners();
+    }
+
+    initializeElements() {
+        return {
+            // Forms and inputs
+            loginForm: document.getElementById('login-form'),
+            emailInput: document.getElementById('email'),
+            magicLinkBtn: document.getElementById('magic-link-btn'),
+            
+            // Sections
+            loginSection: document.getElementById('login-section'),
+            loggedInSection: document.getElementById('logged-in-section'),
+            
+            // Messages
+            responseMessage: document.getElementById('response-message'),
+            logoutMessage: document.getElementById('logout-message'),
+            
+            // User info elements
+            userNameEl: document.getElementById('user-name'),
+            userEmailEl: document.getElementById('user-email'),
+            userAvatarImg: document.getElementById('user-avatar-img'),
+            userAvatarPlaceholder: document.getElementById('user-avatar-placeholder'),
+            logoutBtn: document.getElementById('logout-btn')
+        };
+    }
+
+    setupEventListeners() {
+        // Email input focus effects
+        this.elements.emailInput.addEventListener('focus', () => {
+            this.elements.emailInput.parentElement.style.transform = 'scale(1.02)';
+        });
+        
+        this.elements.emailInput.addEventListener('blur', () => {
+            this.elements.emailInput.parentElement.style.transform = 'scale(1)';
+        });
+    }
+
+    showLoginSection() {
+        this.elements.loginSection.style.display = 'block';
+        this.elements.loggedInSection.style.display = 'none';
+    }
+
+    showLoggedInSection(user) {
+        this.elements.loginSection.style.display = 'none';
+        this.elements.loggedInSection.style.display = 'block';
+        this.updateUserInfo(user);
+    }
+
+    updateUserInfo(user) {
+        this.elements.userNameEl.textContent = user.real_name || '用戶';
+        this.elements.userEmailEl.textContent = user.email || '';
+        
+        if (user.avatar_base64) {
+            this.elements.userAvatarImg.src = `data:image/jpeg;base64,${user.avatar_base64}`;
+            this.elements.userAvatarImg.style.display = 'block';
+            this.elements.userAvatarPlaceholder.style.display = 'none';
+        } else {
+            this.elements.userAvatarImg.style.display = 'none';
+            this.elements.userAvatarPlaceholder.style.display = 'flex';
+        }
+    }
+
+    showMessage(text, type = 'info', autoHide = true) {
+        const messageEl = this.elements.responseMessage;
+        messageEl.innerHTML = `<span class="message-text">${text}</span>`;
+        messageEl.className = `response-message ${type} show`;
+        
+        if (autoHide) {
+            setTimeout(() => this.hideMessage(), 5000);
+        }
+    }
+
+    hideMessage() {
+        const messageEl = this.elements.responseMessage;
+        messageEl.classList.remove('show');
         setTimeout(() => {
-            responseMessage.textContent = '';
-            responseMessage.className = '';
+            messageEl.textContent = '';
+            messageEl.className = 'response-message';
         }, 400);
     }
 
-    // Turnstile callback functions
-    window.onTurnstileSuccess = function(token) {
-        console.log('✅ Step 1: Turnstile verification successful, token:', token.substring(0, 20) + '...');
-        turnstileToken = token;
-        isExecuting = false;
-        
-        // Clear verification timeout
-        if (verificationTimeout) {
-            clearTimeout(verificationTimeout);
-            verificationTimeout = null;
-            console.log('Verification timeout cleared - success');
-        }
-        
-        // If form was submitted and waiting for turnstile, proceed with submission
-        if (isSubmitting) {
-            console.log('📤 Step 2: Form is waiting, proceeding with submission');
-            submitForm();
-        }
-    };
-
-    window.onTurnstileError = function(error) {
-        console.error('Turnstile error:', error);
-        turnstileToken = null;
-        isExecuting = false;
-        
-        // Clear verification timeout
-        if (verificationTimeout) {
-            clearTimeout(verificationTimeout);
-            verificationTimeout = null;
-            console.log('Verification timeout cleared - error');
-        }
-        
-        if (isSubmitting) {
-            isSubmitting = false;
-            showMessage('驗證失敗，正在重新初始化...', 'error');
-            resetButton();
-            // Destroy and recreate widget after error
-            setTimeout(() => {
-                destroyAndRecreateWidget();
-            }, 1000);
-        }
-    };
-
-    window.onTurnstileExpired = function() {
-        console.log('Turnstile token expired');
-        turnstileToken = null;
-        isExecuting = false;
-        
-        // Clear verification timeout
-        if (verificationTimeout) {
-            clearTimeout(verificationTimeout);
-            verificationTimeout = null;
-            console.log('Verification timeout cleared - expired');
-        }
-        
-        if (isSubmitting) {
-            isSubmitting = false;
-            showMessage('驗證已過期，正在重新初始化...', 'error');
-            resetButton();
-            // Destroy and recreate widget after expiration
-            setTimeout(() => {
-                destroyAndRecreateWidget();
-            }, 1000);
-        }
-    };
-
-    // Function to reset button state
-    function resetButton() {
-        magicLinkBtn.classList.remove('loading');
-        magicLinkBtn.innerHTML = `
-            <span>發送魔法連結</span>
-            <i data-feather="arrow-right"></i>
-        `;
-        feather.replace();
-        
-        // Clear any existing timeout
-        if (verificationTimeout) {
-            clearTimeout(verificationTimeout);
-            verificationTimeout = null;
-        }
-        
-        // Enable button if not locked (no longer require Turnstile to be ready)
-        if (!isButtonLocked) {
-            magicLinkBtn.disabled = false;
-        }
+    showLogoutMessage(text, type = 'info') {
+        const messageEl = this.elements.logoutMessage;
+        messageEl.textContent = text;
+        messageEl.className = `response-message ${type} show`;
     }
-    
-    // Function to update button state based on readiness
-    function updateButtonState() {
-        // Always keep button enabled unless it's locked or submitting
-        if (!isButtonLocked && !isSubmitting) {
-            magicLinkBtn.disabled = false;
-            console.log('Button enabled - always ready for user interaction');
+
+    hideLogoutMessage() {
+        const messageEl = this.elements.logoutMessage;
+        messageEl.classList.remove('show');
+        setTimeout(() => {
+            messageEl.textContent = '';
+            messageEl.className = 'response-message';
+        }, 300);
+    }
+
+    setButtonLoading(loading) {
+        const btn = this.elements.magicLinkBtn;
+        if (loading) {
+            btn.disabled = true;
+            btn.classList.add('loading');
+            btn.innerHTML = `
+                <span>處理中</span>
+                <div class="loading-dots">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </div>
+            `;
         } else {
-            magicLinkBtn.disabled = true;
-            if (isButtonLocked) {
-                console.log('Button disabled - locked');
-            } else if (isSubmitting) {
-                console.log('Button disabled - submitting');
-            }
+            btn.disabled = false;
+            btn.classList.remove('loading');
+            btn.innerHTML = `
+                <span>發送魔法連結</span>
+                <i data-feather="arrow-right"></i>
+            `;
+            feather.replace();
         }
     }
-    
-    // Function to lock button for 5 seconds
-    function lockButtonTemporarily() {
-        isButtonLocked = true;
-        magicLinkBtn.disabled = true;
-        magicLinkBtn.classList.add('locked');
-        
-        let countdown = 5;
-        const originalHTML = magicLinkBtn.innerHTML;
-        
-        // Update button text with countdown
-        const updateCountdown = () => {
-            magicLinkBtn.innerHTML = `
+
+    setButtonLocked(locked) {
+        const btn = this.elements.magicLinkBtn;
+        if (locked) {
+            btn.disabled = true;
+            btn.classList.add('locked');
+            btn.innerHTML = `
                 <span>處理中</span>
                 <i data-feather="clock"></i>
             `;
             feather.replace();
-            countdown--;
-            
-            if (countdown >= 0) {
-                setTimeout(updateCountdown, 1000);
-            } else {
-                // Unlock button after countdown
-                isButtonLocked = false;
-                magicLinkBtn.classList.remove('locked');
-                magicLinkBtn.innerHTML = originalHTML;
-                feather.replace();
-                updateButtonState();
-                console.log('Button unlocked, ready for next submission');
-            }
-        };
-        
-        updateCountdown();
+        } else {
+            btn.disabled = false;
+            btn.classList.remove('locked');
+            btn.innerHTML = `
+                <span>發送魔法連結</span>
+                <i data-feather="arrow-right"></i>
+            `;
+            feather.replace();
+        }
     }
 
-    // Function to refresh Turnstile widget
-    function refreshTurnstile() {
-        console.log('Refreshing Turnstile widget...');
-        
-        // Clear all states first
-        turnstileToken = null;
-        isExecuting = false;
-        
-        if (window.turnstile && turnstileWidgetId !== null) {
-            try {
-                // Try to reset the widget
-                window.turnstile.reset(turnstileWidgetId);
-                console.log('Turnstile widget reset successful');
-                
-                // Add a small delay to ensure reset is complete
-                setTimeout(() => {
-                    console.log('Turnstile reset complete, widget ready for next use');
-                }, 100);
-            } catch (error) {
-                console.error('Error resetting Turnstile widget:', error);
-                // If reset fails, remove and recreate the widget
-                destroyAndRecreateWidget();
-            }
+    setLogoutButtonLoading(loading) {
+        const btn = this.elements.logoutBtn;
+        if (loading) {
+            btn.disabled = true;
+            btn.innerHTML = '<span>處理中...</span>';
         } else {
-            console.log('No Turnstile widget to refresh or API not available');
-            // Try to create a new widget if none exists
-            if (window.turnstile) {
-                setTimeout(() => {
-                    renderTurnstile();
-                }, 200);
-            }
+            btn.disabled = false;
+            btn.innerHTML = '<i data-feather="log-out"></i><span>登出</span>';
+            feather.replace();
         }
     }
-    
-    // Function to completely destroy and recreate the widget
-    function destroyAndRecreateWidget() {
-        console.log('Destroying and recreating Turnstile widget...');
-        
-        // Clear widget ID and mark as not ready
-        turnstileWidgetId = null;
-        turnstileToken = null;
-        isExecuting = false;
-        isTurnstileReady = false;
-        
-        // Clear any existing timeout
-        if (verificationTimeout) {
-            clearTimeout(verificationTimeout);
-            verificationTimeout = null;
-        }
-        
-        // Update button state
-        updateButtonState();
-        
-        // Clear the container
-        const turnstileElement = document.querySelector('.cf-turnstile');
-        if (turnstileElement) {
-            turnstileElement.innerHTML = '';
-        }
-        
-        // Recreate after a delay
+
+    setInputError() {
+        this.elements.emailInput.style.animation = 'shake 0.5s ease-in-out';
         setTimeout(() => {
-            console.log('Recreating Turnstile widget...');
-            renderTurnstile();
+            this.elements.emailInput.style.animation = '';
         }, 500);
     }
-    
-    // Function to handle verification timeout
-    function handleVerificationTimeout() {
-        console.log('⏰ Verification timeout - resetting and retrying...');
-        
-        // Clear timeout
-        verificationTimeout = null;
-        
-        // Reset states
-        isSubmitting = false;
-        isExecuting = false;
-        
-        // Show timeout message
-        showMessage('驗證超時，請重新嘗試...', 'error');
-        
-        // Reset button
-        resetButton();
-        
-        // Destroy and recreate widget
+
+    setInputSuccess() {
+        this.elements.emailInput.style.borderColor = 'var(--success-color)';
         setTimeout(() => {
-            destroyAndRecreateWidget();
-        }, 1000);
+            this.elements.emailInput.style.borderColor = '';
+        }, 2000);
+    }
+}
+
+/* ==============================================
+   AUTH MANAGER
+   ============================================== */
+class AuthManager {
+    constructor(apiClient, ui) {
+        this.api = apiClient;
+        this.ui = ui;
     }
 
-    // Function to render Turnstile widget
-    function renderTurnstile() {
-        if (window.turnstile) {
-            const turnstileElement = document.querySelector('.cf-turnstile');
+    async checkStatus() {
+        try {
+            const token = localStorage.getItem('access_token');
+            if (!token) {
+                this.ui.showLoginSection();
+                return;
+            }
+
+            const result = await this.api.checkAuthStatus(token);
+            if (result.success && result.data.authenticated) {
+                this.ui.showLoggedInSection(result.data.user);
+            } else {
+                localStorage.removeItem('access_token');
+                this.ui.showLoginSection();
+            }
+        } catch (error) {
+            console.error('Auth status check failed:', error);
+            this.ui.showLoginSection();
+        }
+    }
+
+    async sendMagicLink(email, turnstileToken, oidcStateId) {
+        const result = await this.api.sendMagicLink(email, turnstileToken, oidcStateId);
+        
+        if (result.success) {
+            this.ui.showMessage(result.data.message || '魔法連結已發送到您的 Email！', 'success');
+            this.ui.setInputSuccess();
+            return true;
+        } else {
+            this.ui.showMessage(result.error || '發生錯誤，請稍後再試', 'error');
+            this.ui.setInputError();
+            return false;
+        }
+    }
+
+    async logout() {
+        try {
+            this.ui.setLogoutButtonLoading(true);
             
-            // Check if widget is already rendered
-            if (turnstileWidgetId !== null) {
-                console.log('Turnstile widget already exists with ID:', turnstileWidgetId);
+            const result = await this.api.logout();
+            localStorage.removeItem('access_token');
+            
+            if (result.success) {
+                this.ui.showLogoutMessage('登出成功！', 'success');
+            } else {
+                this.ui.showLogoutMessage('登出成功（本地）', 'success');
+            }
+            
+            setTimeout(() => {
+                this.ui.showLoginSection();
+                this.ui.hideLogoutMessage();
+            }, 1500);
+        } catch (error) {
+            console.error('Logout error:', error);
+            localStorage.removeItem('access_token');
+            this.ui.showLogoutMessage('登出成功（本地）', 'success');
+            setTimeout(() => {
+                this.ui.showLoginSection();
+                this.ui.hideLogoutMessage();
+            }, 1500);
+        } finally {
+            this.ui.setLogoutButtonLoading(false);
+        }
+    }
+}
+
+/* ==============================================
+   MAIN APPLICATION
+   ============================================== */
+class SSOApp {
+    constructor() {
+        this.config = new ConfigManager();
+        this.api = new ApiClient();
+        this.ui = new UIManager();
+        this.auth = new AuthManager(this.api, this.ui);
+        this.turnstile = new TurnstileManager(this.config);
+        
+        this.isSubmitting = false;
+        this.isButtonLocked = false;
+        
+        this.initialize();
+    }
+
+    async initialize() {
+        console.log('🚀 Initializing SSO App...');
+        
+        try {
+            // Initialize Turnstile
+            await this.turnstile.initialize();
+            
+            // Check authentication status
+            await this.auth.checkStatus();
+            
+            // Setup form submission
+            this.setupFormHandling();
+            
+            // Setup logout handling
+            this.setupLogoutHandling();
+            
+            // Handle logout success message from URL
+            this.handleLogoutSuccessMessage();
+            
+            console.log('✅ SSO App initialized successfully');
+        } catch (error) {
+            console.error('❌ SSO App initialization failed:', error);
+            this.ui.showMessage('系統初始化失敗，請刷新頁面重試', 'error');
+        }
+    }
+
+    setupFormHandling() {
+        this.ui.elements.loginForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            if (this.isSubmitting || this.isButtonLocked) {
+                console.log('Form submission blocked (already submitting or locked)');
                 return;
             }
             
-            if (turnstileElement) {
-                // Check if element already has a widget
-                if (turnstileElement.innerHTML.trim() !== '') {
-                    console.log('Turnstile element already contains content, clearing...');
-                    turnstileElement.innerHTML = '';
-                }
-                
-                // Try to get sitekey from multiple sources
-                let sitekey = turnstileElement.getAttribute('data-sitekey');
-                
-                // Fallback to global variable if data attribute is empty
-                if (!sitekey || sitekey.trim() === '') {
-                    sitekey = window.TURNSTILE_SITE_KEY;
-                    console.log('Using global TURNSTILE_SITE_KEY:', sitekey);
-                }
-                
-                console.log('Attempting to render Turnstile with sitekey:', sitekey);
-                
-                if (!sitekey || sitekey.trim() === '') {
-                    console.error('Turnstile sitekey is empty or undefined from both sources');
-                    return;
-                }
-                
-                try {
-                    turnstileWidgetId = window.turnstile.render(turnstileElement, {
-                        sitekey: sitekey,
-                        callback: 'onTurnstileSuccess',
-                        'error-callback': 'onTurnstileError',
-                        'expired-callback': 'onTurnstileExpired',
-                        theme: 'dark',
-                        size: 'invisible'
-                    });
-                    console.log('Turnstile widget rendered with ID:', turnstileWidgetId);
-                    
-                    // Mark Turnstile as ready and update button state
-                    isTurnstileReady = true;
-                    updateButtonState();
-                } catch (error) {
-                    console.error('Error rendering Turnstile:', error);
-                    turnstileWidgetId = null;
-                }
-            } else {
-                console.log('Turnstile element not found');
-            }
-        } else {
-            console.log('Turnstile API not loaded yet');
-        }
-    }
-
-    // Wait for Turnstile to load and render widget
-    function waitForTurnstile() {
-        if (window.turnstile) {
-            renderTurnstile();
-        } else {
-            setTimeout(waitForTurnstile, 100);
-        }
-    }
-
-    // Wait for Turnstile to be ready with delay mechanism
-    async function waitForTurnstileWithDelay() {
-        console.log('🔄 Starting delayed verification process...');
-        
-        // Show countdown while waiting for Turnstile to be ready
-        let countdown = 5;
-        
-        const countdownInterval = setInterval(() => {
-            if (countdown > 0) {
-                magicLinkBtn.innerHTML = `
-                    <span>處理中</span>
-                    <div class="loading-dots">
-                        <span></span>
-                        <span></span>
-                        <span></span>
-                    </div>
-                `;
-                countdown--;
-            } else {
-                clearInterval(countdownInterval);
-                
-                // Change to verification state
-                magicLinkBtn.innerHTML = `
-                    <span>處理中</span>
-                    <div class="loading-dots">
-                        <span></span>
-                        <span></span>
-                        <span></span>
-                    </div>
-                `;
-                console.log('⏰ Delay period complete, proceeding with verification');
-            }
-        }, 1000);
-
-        // Wait for the delay period and ensure Turnstile is ready
-        await new Promise(resolve => {
-            const checkReady = () => {
-                if (countdown <= 0 && (isTurnstileReady || window.turnstile)) {
-                    // Ensure widget is rendered if not already
-                    if (!isTurnstileReady && window.turnstile) {
-                        renderTurnstile();
-                    }
-                    resolve();
-                } else {
-                    setTimeout(checkReady, 100);
-                }
-            };
-            checkReady();
+            await this.handleFormSubmit();
         });
-        
-        console.log('✅ Verification preparation complete');
     }
 
-    // Start waiting for Turnstile
-    waitForTurnstile();
+    setupLogoutHandling() {
+        this.ui.elements.logoutBtn.addEventListener('click', () => {
+            this.auth.logout();
+        });
+    }
 
-    // Function to actually submit the form
-    async function submitForm() {
-        if (!turnstileToken) {
-            showMessage('驗證失敗，請重新嘗試。', 'error');
-            resetButton();
-            refreshTurnstile();
+    async handleFormSubmit() {
+        const email = this.ui.elements.emailInput.value.trim();
+        if (!email) {
+            this.ui.showMessage('請輸入有效的電子郵件地址', 'error');
             return;
         }
 
-        const email = emailInput.value;
-        const tokenToUse = turnstileToken; // Store token before clearing
-        
-        // Clear token immediately after capturing it for use
-        turnstileToken = null;
-        console.log('🔄 Step 3: Token captured and cleared for submission');
+        this.isSubmitting = true;
+        this.ui.setButtonLoading(true);
+        this.ui.hideMessage();
 
         try {
-            // Get OIDC state ID from template if available
-            const oidcStateId = window.oidcStateId || null;
+            // Get Turnstile token
+            const turnstileToken = await this.turnstile.getToken();
             
-            const requestBody = { 
-                email: email,
-                turnstile_token: tokenToUse
-            };
+            // Send magic link
+            const success = await this.auth.sendMagicLink(
+                email, 
+                turnstileToken, 
+                this.config.get('oidcStateId')
+            );
             
-            if (oidcStateId) {
-                requestBody.oidc_state_id = oidcStateId;
+            if (success) {
+                this.ui.elements.emailInput.value = '';
             }
-
-            const response = await fetch('/auth/magic-link', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(requestBody),
-            });
-
-            const data = await response.json();
-
-            // Add a small delay for better UX
-            await new Promise(resolve => setTimeout(resolve, 800));
-
-            if (response.ok) {
-                showMessage(data.message || '魔法連結已發送到您的 Email！', 'success');
-                emailInput.value = '';
-                
-                // Add success animation to input
-                emailInput.style.borderColor = 'var(--success-color)';
-                setTimeout(() => {
-                    emailInput.style.borderColor = '';
-                }, 2000);
-            } else {
-                showMessage(data.detail || '發生錯誤，請稍後再試。', 'error');
-                
-                // Add error shake animation
-                emailInput.style.animation = 'shake 0.5s ease-in-out';
-                setTimeout(() => {
-                    emailInput.style.animation = '';
-                }, 500);
-            }
+            
         } catch (error) {
-            console.error('Error requesting magic link:', error);
-            await new Promise(resolve => setTimeout(resolve, 800));
-            showMessage('網路錯誤，請檢查您的網路連線。', 'error');
-            
-            // Add error shake animation
-            emailInput.style.animation = 'shake 0.5s ease-in-out';
-            setTimeout(() => {
-                emailInput.style.animation = '';
-            }, 500);
+            console.error('Form submission error:', error);
+            this.ui.showMessage(error.message || '發生錯誤，請稍後再試', 'error');
+            this.ui.setInputError();
         } finally {
-            isSubmitting = false;
-            resetButton();
-            
-            // Ensure token is cleared (already cleared in submitForm, but double-check)
-            if (turnstileToken) {
-                turnstileToken = null;
-                console.log('Token cleared in finally block');
-            }
-            
-            // Lock button for 5 seconds to prevent rapid submissions
-            console.log('🔒 Step 4: Locking button for 5 seconds');
-            lockButtonTemporarily();
-            
-            // Refresh Turnstile widget with delay for next submission
-            setTimeout(() => {
-                console.log('🔄 Step 5: Refreshing Turnstile widget for next use');
-                refreshTurnstile();
-            }, 500);
+            this.isSubmitting = false;
+            this.ui.setButtonLoading(false);
+            this.lockButtonTemporarily();
+            this.turnstile.reset();
         }
     }
 
-    // Form submission handler
-    loginForm.addEventListener('submit', async (e) => {
-        e.preventDefault();
+    lockButtonTemporarily() {
+        this.isButtonLocked = true;
+        this.ui.setButtonLocked(true);
 
-        if (isSubmitting) {
-            return; // Prevent double submission
+        setTimeout(() => {
+            this.isButtonLocked = false;
+            this.ui.setButtonLocked(false);
+        }, 5000);
+    }
+
+    handleLogoutSuccessMessage() {
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.get('logout') === 'success') {
+            this.ui.showMessage('登出成功！', 'success');
+            
+            // Clean URL
+            const newUrl = `${window.location.protocol}//${window.location.host}${window.location.pathname}`;
+            window.history.replaceState({path: newUrl}, '', newUrl);
         }
-        
-        if (isButtonLocked) {
-            console.log('Button is locked, submission blocked');
-            return; // Prevent submission during lock period
-        }
+    }
+}
 
-        const email = emailInput.value;
-        if (!email) {
-            showMessage('請輸入電子郵件地址。', 'error');
-            return;
-        }
-
-        hideMessage();
-        isSubmitting = true;
-
-        // Show loading state with smooth animation
-        magicLinkBtn.disabled = true;
-        magicLinkBtn.classList.add('loading');
-        
-        // Initial loading state - preparing for verification
-        magicLinkBtn.innerHTML = `
-            <span>處理中</span>
-            <div class="loading-dots">
-                <span></span>
-                <span></span>
-                <span></span>
-            </div>
-        `;
-
-        // Wait for Turnstile to be ready with a delay mechanism
-        await waitForTurnstileWithDelay();
-
-        // If Turnstile token is already available, submit immediately
-        if (turnstileToken) {
-            submitForm();
-        } else {
-            // Execute Turnstile challenge
-            if (window.turnstile && turnstileWidgetId !== null) {
-                try {
-                    // Check if widget is already executing
-                    if (isExecuting) {
-                        console.log('Turnstile is already executing, waiting...');
-                        return;
-                    }
-                    
-                    // Check if widget already has a valid response
-                    let widgetState = null;
-                    try {
-                        widgetState = window.turnstile.getResponse(turnstileWidgetId);
-                    } catch (getResponseError) {
-                        console.log('Could not get widget response, proceeding with execution');
-                    }
-                    
-                    if (widgetState && widgetState.trim() !== '') {
-                        console.log('Widget already has response, using existing token');
-                        turnstileToken = widgetState;
-                        submitForm();
-                    } else {
-                        console.log('Executing Turnstile challenge');
-                        isExecuting = true;
-                        
-                        // Set timeout for verification (15 seconds)
-                        verificationTimeout = setTimeout(() => {
-                            if (isExecuting && isSubmitting) {
-                                console.log('Verification taking too long, triggering timeout');
-                                handleVerificationTimeout();
-                            }
-                        }, 15000);
-                        
-                        // Add a small delay to ensure widget is ready
-                        setTimeout(() => {
-                            try {
-                                window.turnstile.execute(turnstileWidgetId);
-                            } catch (executeError) {
-                                console.error('Execute error:', executeError);
-                                isExecuting = false;
-                                
-                                // Clear timeout on immediate error
-                                if (verificationTimeout) {
-                                    clearTimeout(verificationTimeout);
-                                    verificationTimeout = null;
-                                }
-                                
-                                // Try to reset and recreate if execute fails
-                                console.log('Execute failed, attempting to reset and recreate widget');
-                                isSubmitting = false;
-                                showMessage('驗證系統錯誤，正在重新初始化...', 'error');
-                                resetButton();
-                                destroyAndRecreateWidget();
-                            }
-                        }, 100);
-                    }
-                } catch (error) {
-                    console.error('Error in Turnstile execution flow:', error);
-                    isExecuting = false;
-                    isSubmitting = false;
-                    showMessage('驗證系統錯誤，請重新嘗試。', 'error');
-                    resetButton();
-                    destroyAndRecreateWidget();
-                }
-            } else {
-                isSubmitting = false;
-                showMessage('驗證系統尚未準備就緒，請稍後再試。', 'error');
-                resetButton();
-                
-                // Try to render widget if it doesn't exist
-                if (window.turnstile) {
-                    setTimeout(() => {
-                        renderTurnstile();
-                    }, 500);
-                }
-            }
-        }
-    });
-
-    // Add interactive effects
-    emailInput.addEventListener('input', () => {
-        hideMessage();
-        emailInput.style.borderColor = '';
-        emailInput.style.animation = '';
-    });
-
-    // Add focus effects
-    emailInput.addEventListener('focus', () => {
-        emailInput.parentElement.style.transform = 'scale(1.02)';
-    });
-
-    emailInput.addEventListener('blur', () => {
-        emailInput.parentElement.style.transform = 'scale(1)';
-    });
+/* ==============================================
+   APPLICATION INITIALIZATION
+   ============================================== */
+document.addEventListener('DOMContentLoaded', () => {
+    // Initialize the SSO application
+    window.ssoApp = new SSOApp();
 }); 

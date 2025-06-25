@@ -34,72 +34,44 @@
                     </div>
                     {% endif %}
                     <p class="subtitle">改變世界的起點，由你創造</p>
+                    
                     <form id="login-form">
                         <div class="input-group">
                             <input type="email" id="email" name="email" placeholder="請輸入您的電子郵件" required>
                         </div>
-                        <!-- Invisible Turnstile widget -->
+                        
+                        <!-- Turnstile widget container -->
                         <div class="cf-turnstile" 
                              data-sitekey="{{ turnstile_site_key }}" 
-                             data-callback="onTurnstileSuccess"
-                             data-error-callback="onTurnstileError"
-                             data-expired-callback="onTurnstileExpired"
                              data-theme="dark"
-                             data-size="invisible">
+                             data-size="invisible"
+                             {% if oidc_state_id %}data-oidc-state-id="{{ oidc_state_id }}"{% endif %}
+                             data-turnstile-key="{{ turnstile_site_key }}"
+                             data-static-version="{{ static_version }}">
                         </div>
-                        <!-- Turnstile configuration -->
-                        <script>
-                            window.TURNSTILE_SITE_KEY = '{{ turnstile_site_key }}';
-                            // OIDC state ID if available
-                            {% if oidc_state_id %}
-                            window.oidcStateId = '{{ oidc_state_id }}';
-                            {% endif %}
-                            
-                            // Check for logout success message
-                            document.addEventListener('DOMContentLoaded', () => {
-                                const urlParams = new URLSearchParams(window.location.search);
-                                if (urlParams.get('logout') === 'success') {
-                                    // Show logout success message
-                                    const messageEl = document.getElementById('response-message');
-                                    if (messageEl) {
-                                        messageEl.innerHTML = '<span class="message-text">登出成功！</span>';
-                                        messageEl.className = 'success show';
-                                        
-                                        // Auto hide after 3 seconds
-                                        setTimeout(() => {
-                                            messageEl.classList.remove('show');
-                                            setTimeout(() => {
-                                                messageEl.textContent = '';
-                                                messageEl.className = '';
-                                            }, 400);
-                                        }, 3000);
-                                    }
-                                    
-                                    // Clean URL
-                                    const newUrl = window.location.protocol + "//" + window.location.host + window.location.pathname;
-                                    window.history.replaceState({path: newUrl}, '', newUrl);
-                                }
-                            });
-                        </script>
-                        <button type="submit" class="magic-link-btn">
+                        
+                        <button type="submit" class="magic-link-btn" id="magic-link-btn">
                             <span>發送魔法連結</span>
                             <i data-feather="arrow-right"></i>
                         </button>
                     </form>
+                    
                     <div class="divider">
                         <span>或</span>
                     </div>
+                    
                     <div class="social-login">
-                        <button class="social-btn google">
+                        <button class="social-btn google" disabled>
                             <i data-feather="chrome"></i>
-                            <span>使用 Google 登入</span>
+                            <span>Google 登入 (即將推出)</span>
                         </button>
-                        <button class="social-btn discord">
+                        <button class="social-btn discord" disabled>
                             <i data-feather="message-square"></i>
-                            <span>使用 Discord 登入</span>
+                            <span>Discord 登入 (即將推出)</span>
                         </button>
                     </div>
-                    <p id="response-message"></p>
+                    
+                    <div id="response-message" class="response-message"></div>
                 </div>
                 
                 <!-- Logged In State (shown when authenticated) -->
@@ -110,6 +82,7 @@
                         </div>
                         <h1 class="title">HackIt</h1>
                     </div>
+                    
                     <div class="user-profile">
                         <div class="user-avatar">
                             <img id="user-avatar-img" src="" alt="用戶頭像" style="display: none;">
@@ -122,22 +95,29 @@
                             <p id="user-email">載入中...</p>
                         </div>
                     </div>
+                    
                     <div class="logged-in-message">
                         <h3>您已經登入了！</h3>
                         <p>您可以繼續使用 HackIt 的所有功能。</p>
                     </div>
+                    
                     <button id="logout-btn" class="logout-btn">
                         <i data-feather="log-out"></i>
                         <span>登出</span>
                     </button>
-                    <p id="logout-message"></p>
+                    
+                    <div id="logout-message" class="response-message"></div>
                 </div>
             </div>
         </div>
     </div>
+
+    <!-- Main Application Script -->
     <script src="{{ url_for('static', path='/js/script.js') }}?v={{ static_version }}"></script>
+    
+    <!-- Initialize Feather Icons -->
     <script>
-        feather.replace()
+        feather.replace();
     </script>
 </body>
 </html> 

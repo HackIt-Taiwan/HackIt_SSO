@@ -46,9 +46,10 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = "production"
     
     # Static Assets Version (for cache busting)
-    STATIC_VERSION: str = "20250625"
+    STATIC_VERSION: str = "20250625_v2"
 
     class Config:
         env_file = ".env"
+        extra = "ignore"
 
 settings = Settings() 
