@@ -223,7 +223,8 @@ async def login_page(
             "turnstile_site_key": settings.TURNSTILE_SITE_KEY,
             "oidc_params": oidc_params,
             "oidc_client_name": oidc_client_name,
-            "oidc_state_id": oidc_state
+            "oidc_state_id": oidc_state,
+            "static_version": settings.STATIC_VERSION
         }
     )
 
