@@ -191,12 +191,22 @@ class OIDCService:
         
         try:
             # Store code for 10 minutes
+            redis_key = f"oidc:auth_code:{code}"
             redis_client.set(
-                f"oidc:auth_code:{code}",
+                redis_key,
                 json.dumps(code_data),
                 ex=600
             )
             logger.info(f"Generated authorization code for client {client_id}, user {user_id}")
+            logger.debug(f"Stored auth code data in Redis key: {redis_key}, data: {code_data}")
+            
+            # Verify storage immediately
+            stored_data = redis_client.get(redis_key)
+            if stored_data:
+                logger.debug(f"Authorization code successfully stored and verified in Redis")
+            else:
+                logger.error(f"Failed to verify authorization code storage in Redis")
+                
         except Exception as e:
             logger.error(f"Error storing authorization code: {str(e)}")
             raise

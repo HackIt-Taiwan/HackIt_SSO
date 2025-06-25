@@ -6,20 +6,15 @@
     <title>{{ title }} - HackIt</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <script src="https://unpkg.com/feather-icons"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Noto+Sans+TC:wght@300;400;500;600&display=swap" rel="stylesheet">
     <style>
         :root {
-            --background-start: #0a0a1a;
-            --background-end: #1a1a2e;
-            --background-accent: #16213e;
-            --card-background: rgba(255, 255, 255, 0.08);
-            --card-border: rgba(255, 255, 255, 0.15);
-            --text-primary: #ffffff;
-            --text-secondary: #b4b8d1;
+            --primary-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             --success-color: #10b981;
-            --error-color: #ef4444;
-            --accent-color: #6366f1;
+            --text-primary: #ffffff;
+            --text-secondary: rgba(255, 255, 255, 0.8);
+            --glass-bg: rgba(255, 255, 255, 0.1);
+            --glass-border: rgba(255, 255, 255, 0.2);
         }
 
         * {
@@ -30,40 +25,73 @@
 
         body {
             font-family: 'Noto Sans TC', 'Inter', sans-serif;
-            color: var(--text-primary);
-            background: linear-gradient(135deg, var(--background-start), var(--background-end), var(--background-accent), #3730a3);
-            background-size: 400% 400%;
-            animation: gradient-flow 20s ease infinite;
+            background: var(--primary-gradient);
             min-height: 100vh;
             display: flex;
-            justify-content: center;
             align-items: center;
-            padding: 20px;
+            justify-content: center;
+            overflow: hidden;
+            position: relative;
         }
 
-        @keyframes gradient-flow {
-            0%, 100% { background-position: 0% 50%; }
-            50% { background-position: 100% 50%; }
-        }
-
-        .result-card {
+        /* Animated background particles */
+        .bg-animation {
+            position: absolute;
+            top: 0;
+            left: 0;
             width: 100%;
-            max-width: 500px;
-            background: var(--card-background);
-            border: 1px solid var(--card-border);
-            border-radius: 24px;
-            backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px);
-            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
-            text-align: center;
-            animation: float-in 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
-            opacity: 0;
+            height: 100%;
+            overflow: hidden;
+            z-index: 0;
         }
 
-        @keyframes float-in {
+        .particle {
+            position: absolute;
+            width: 4px;
+            height: 4px;
+            background: rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            animation: float 6s infinite linear;
+        }
+
+        .particle:nth-child(1) { left: 10%; animation-delay: 0s; }
+        .particle:nth-child(2) { left: 20%; animation-delay: 1s; }
+        .particle:nth-child(3) { left: 30%; animation-delay: 2s; }
+        .particle:nth-child(4) { left: 40%; animation-delay: 3s; }
+        .particle:nth-child(5) { left: 50%; animation-delay: 4s; }
+        .particle:nth-child(6) { left: 60%; animation-delay: 5s; }
+        .particle:nth-child(7) { left: 70%; animation-delay: 2.5s; }
+        .particle:nth-child(8) { left: 80%; animation-delay: 1.5s; }
+        .particle:nth-child(9) { left: 90%; animation-delay: 3.5s; }
+
+        @keyframes float {
+            0% {
+                transform: translateY(100vh) rotate(0deg);
+                opacity: 0;
+            }
+            10% {
+                opacity: 1;
+            }
+            90% {
+                opacity: 1;
+            }
+            100% {
+                transform: translateY(-10vh) rotate(360deg);
+                opacity: 0;
+            }
+        }
+
+        .transition-container {
+            text-align: center;
+            z-index: 10;
+            position: relative;
+            animation: slideInUp 0.8s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        @keyframes slideInUp {
             from {
                 opacity: 0;
-                transform: translateY(30px) scale(0.95);
+                transform: translateY(50px) scale(0.9);
             }
             to {
                 opacity: 1;
@@ -71,10 +99,176 @@
             }
         }
 
-        .card-content {
-            padding: 48px 40px;
+        {% if seamless_mode %}
+        .status-icon {
+            width: 64px;
+            height: 64px;
+            margin: 0 auto 24px;
+            position: relative;
         }
 
+        .checkmark {
+            width: 64px;
+            height: 64px;
+            border-radius: 50%;
+            background: var(--success-color);
+            position: relative;
+            transform: rotate(-45deg);
+            animation: checkmarkScale 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+        }
+
+        .checkmark::before {
+            content: '';
+            position: absolute;
+            width: 16px;
+            height: 8px;
+            background: white;
+            left: 14px;
+            top: 24px;
+            border-radius: 2px;
+            transform-origin: left;
+            animation: checkmarkLeft 0.3s ease-in-out 0.3s forwards;
+            transform: scaleX(0);
+        }
+
+        .checkmark::after {
+            content: '';
+            position: absolute;
+            width: 24px;
+            height: 8px;
+            background: white;
+            left: 22px;
+            top: 32px;
+            border-radius: 2px;
+            transform-origin: left;
+            animation: checkmarkRight 0.3s ease-in-out 0.6s forwards;
+            transform: scaleX(0);
+        }
+
+        @keyframes checkmarkScale {
+            0% {
+                transform: rotate(-45deg) scale(0);
+            }
+            100% {
+                transform: rotate(-45deg) scale(1);
+            }
+        }
+
+        @keyframes checkmarkLeft {
+            0% {
+                transform: scaleX(0);
+            }
+            100% {
+                transform: scaleX(1);
+            }
+        }
+
+        @keyframes checkmarkRight {
+            0% {
+                transform: scaleX(0);
+            }
+            100% {
+                transform: scaleX(1);
+            }
+        }
+
+        .title {
+            font-size: 1.8rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 16px;
+            letter-spacing: -0.02em;
+        }
+
+        .message {
+            font-size: 1rem;
+            color: var(--text-secondary);
+            font-weight: 300;
+            margin-bottom: 32px;
+        }
+
+        .loading-dots {
+            display: inline-flex;
+            gap: 4px;
+            align-items: center;
+        }
+
+        .dot {
+            width: 4px;
+            height: 4px;
+            border-radius: 50%;
+            background: var(--text-secondary);
+            animation: dotPulse 1.5s infinite ease-in-out;
+        }
+
+        .dot:nth-child(1) { animation-delay: 0s; }
+        .dot:nth-child(2) { animation-delay: 0.3s; }
+        .dot:nth-child(3) { animation-delay: 0.6s; }
+
+        @keyframes dotPulse {
+            0%, 80%, 100% {
+                transform: scale(0.8);
+                opacity: 0.5;
+            }
+            40% {
+                transform: scale(1.2);
+                opacity: 1;
+            }
+        }
+
+        .client-info {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            margin-top: 24px;
+            opacity: 0;
+            animation: fadeInUp 0.8s ease-out 0.5s forwards;
+        }
+
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .progress-bar {
+            width: 200px;
+            height: 2px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 1px;
+            margin: 24px auto;
+            overflow: hidden;
+            opacity: 0;
+            animation: fadeIn 0.5s ease-out 1s forwards;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--success-color), #34d399);
+            border-radius: 1px;
+            animation: progressFill 1.5s ease-out forwards;
+        }
+
+        @keyframes progressFill {
+            from {
+                width: 0%;
+            }
+            to {
+                width: 100%;
+            }
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        {% else %}
+        /* Regular mode styles for error states */
         .status-icon {
             width: 80px;
             height: 80px;
@@ -83,42 +277,15 @@
             align-items: center;
             justify-content: center;
             margin: 0 auto 24px;
-            animation: pulse-glow 2s ease-in-out infinite;
-        }
-
-        .status-icon.success {
-            background: linear-gradient(135deg, var(--success-color), #059669);
-            box-shadow: 0 8px 32px rgba(16, 185, 129, 0.3);
-        }
-
-        .status-icon.error {
-            background: linear-gradient(135deg, var(--error-color), #dc2626);
+            background: #ef4444;
             box-shadow: 0 8px 32px rgba(239, 68, 68, 0.3);
-        }
-
-        .status-icon i {
-            width: 40px;
-            height: 40px;
-            color: white;
-        }
-
-        @keyframes pulse-glow {
-            0%, 100% { transform: scale(1); }
-            50% { transform: scale(1.05); }
         }
 
         .title {
             font-size: 2rem;
-            font-weight: 700;
+            font-weight: 600;
+            color: #ef4444;
             margin-bottom: 16px;
-        }
-
-        .title.success {
-            color: var(--success-color);
-        }
-
-        .title.error {
-            color: var(--error-color);
         }
 
         .message {
@@ -128,34 +295,14 @@
             line-height: 1.6;
         }
 
-        .user-info {
-            background: rgba(0, 0, 0, 0.2);
-            border-radius: 12px;
-            padding: 20px;
-            margin-bottom: 32px;
-            text-align: left;
-        }
-
-        .user-info h3 {
-            color: var(--text-primary);
-            margin-bottom: 12px;
-            font-size: 1.1rem;
-        }
-
-        .user-info p {
-            color: var(--text-secondary);
-            margin-bottom: 8px;
-            font-size: 0.9rem;
-        }
-
         .action-button {
             display: inline-block;
-            background: linear-gradient(135deg, var(--accent-color), #4f46e5);
+            background: var(--primary-gradient);
             color: white;
             text-decoration: none;
             padding: 14px 28px;
             border-radius: 12px;
-            font-weight: 600;
+            font-weight: 500;
             font-size: 1rem;
             transition: all 0.3s ease;
             border: none;
@@ -163,62 +310,91 @@
         }
 
         .action-button:hover {
-            transform: scale(1.05);
-            box-shadow: 0 8px 32px rgba(99, 102, 241, 0.4);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+        }
+        {% endif %}
+
+        /* Fade out animation for page transition */
+        .fade-out {
+            animation: fadeOut 0.5s ease-in-out forwards;
         }
 
-        .countdown {
-            margin-top: 20px;
-            color: var(--text-secondary);
-            font-size: 0.9rem;
+        @keyframes fadeOut {
+            from {
+                opacity: 1;
+                transform: scale(1);
+            }
+            to {
+                opacity: 0;
+                transform: scale(0.95);
+            }
         }
 
         @media (max-width: 480px) {
-            .card-content {
-                padding: 32px 24px;
-            }
-            
             .title {
-                font-size: 1.8rem;
+                font-size: 1.6rem;
             }
             
             .status-icon {
-                width: 64px;
-                height: 64px;
+                width: 56px;
+                height: 56px;
             }
             
-            .status-icon i {
-                width: 32px;
-                height: 32px;
+            .checkmark {
+                width: 56px;
+                height: 56px;
             }
         }
     </style>
 </head>
 <body>
-    <div class="result-card">
-        <div class="card-content">
-            <div class="status-icon {{ 'success' if success else 'error' }}">
-                {% if success %}
-                    <i data-feather="check"></i>
-                {% else %}
-                    <i data-feather="x"></i>
-                {% endif %}
+    <div class="bg-animation">
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+    </div>
+
+    <div class="transition-container">
+        {% if seamless_mode %}
+            <div class="status-icon">
+                <div class="checkmark"></div>
             </div>
             
-            <h1 class="title {{ 'success' if success else 'error' }}">{{ title }}</h1>
-            <p class="message">{{ message }}</p>
+            <h1 class="title">{{ title }}</h1>
+            <p class="message">
+                {{ message }}
+                <span class="loading-dots">
+                    <span class="dot"></span>
+                    <span class="dot"></span>
+                    <span class="dot"></span>
+                </span>
+            </p>
             
-            {% if success and user_info %}
-            <div class="user-info">
-                <h3>用戶資訊</h3>
-                <p><strong>姓名：</strong>{{ user_info.real_name }}</p>
-                <p><strong>Email：</strong>{{ user_info.email }}</p>
-                {% if user_info.education_stage %}
-                <p><strong>教育階段：</strong>{{ user_info.education_stage }}</p>
-                {% endif %}
-                <p><strong>註冊時間：</strong>{{ user_info.registered_at[:10] if user_info.registered_at else '未知' }}</p>
+            <div class="progress-bar">
+                <div class="progress-fill"></div>
             </div>
+
+            {% if client_name %}
+            <div class="client-info">正在前往 {{ client_name }}</div>
             {% endif %}
+        {% else %}
+            <div class="status-icon">
+                {% if success %}
+                    <div class="checkmark"></div>
+                {% else %}
+                    ✕
+                {% endif %}
+            </div>
+            
+            <h1 class="title">{{ title }}</h1>
+            <p class="message">{{ message }}</p>
             
             <a href="{{ redirect_url }}" class="action-button">
                 {% if success %}
@@ -227,30 +403,49 @@
                     返回登入頁面
                 {% endif %}
             </a>
-            
-            <div class="countdown">
-                <span id="countdown-text">5 秒後自動跳轉...</span>
-            </div>
-        </div>
+        {% endif %}
     </div>
 
     <script>
-        feather.replace();
-        
-        // Auto redirect after 5 seconds
-        let countdown = 5;
-        const countdownElement = document.getElementById('countdown-text');
-        
-        const timer = setInterval(() => {
-            countdown--;
-            countdownElement.textContent = `${countdown} 秒後自動跳轉...`;
+        const autoRedirect = {{ 'true' if auto_redirect else 'false' }};
+        const redirectDelay = {{ redirect_delay if redirect_delay else 5000 }};
+        const redirectUrl = '{{ redirect_url }}';
+        const seamlessMode = {{ 'true' if seamless_mode else 'false' }};
+
+        if (autoRedirect && seamlessMode) {
+            // Seamless mode: smooth transition without countdown
+            setTimeout(() => {
+                // Add fade out effect before redirect
+                document.body.classList.add('fade-out');
+                
+                // Redirect after fade out completes
+                setTimeout(() => {
+                    window.location.href = redirectUrl;
+                }, 300);
+            }, redirectDelay);
+        } else if (autoRedirect) {
+            // Regular mode with countdown
+            let countdown = Math.ceil(redirectDelay / 1000);
+            const countdownElement = document.getElementById('countdown-text');
             
-            if (countdown <= 0) {
-                clearInterval(timer);
-                window.location.href = '{{ redirect_url }}';
+            if (countdownElement) {
+                const timer = setInterval(() => {
+                    countdown--;
+                    countdownElement.textContent = `${countdown} 秒後自動跳轉...`;
+                    
+                    if (countdown <= 0) {
+                        clearInterval(timer);
+                        window.location.href = redirectUrl;
+                    }
+                }, 1000);
             }
-        }, 1000);
-        
+            
+            // Also redirect after the exact delay
+            setTimeout(() => {
+                window.location.href = redirectUrl;
+            }, redirectDelay);
+        }
+
         // Store access token in localStorage if provided
         {% if success and access_token %}
         localStorage.setItem('access_token', '{{ access_token }}');

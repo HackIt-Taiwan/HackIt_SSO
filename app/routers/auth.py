@@ -354,6 +354,10 @@ async def verify_magic_link(request: Request, token: str = Query(...)):
                     from app.services.oidc_service import OIDCService
                     oidc_service = OIDCService()
                     
+                    logger.info(f"Processing OIDC authorization for user {session_data['user_info']['email']}")
+                    logger.debug(f"OIDC params: {oidc_params}")
+                    logger.debug(f"User session data: {session_data['user_info']}")
+                    
                     # Generate authorization code for OIDC client
                     auth_code = oidc_service.generate_authorization_code(
                         client_id=oidc_params["client_id"],
@@ -362,14 +366,36 @@ async def verify_magic_link(request: Request, token: str = Query(...)):
                         scope=oidc_params.get("scope", "openid"),
                         nonce=oidc_params.get("nonce")
                     )
+                    logger.info(f"Generated authorization code: {auth_code[:8]}... for OIDC flow")
                     
                     # Redirect back to OIDC client with authorization code
                     redirect_url = f"{oidc_params['redirect_uri']}?code={auth_code}"
                     if oidc_params.get("state"):
                         redirect_url += f"&state={oidc_params['state']}"
                     
-                    logger.info(f"OIDC Magic Link authorization successful, redirecting to: {oidc_params['redirect_uri']}")
-                    response = RedirectResponse(url=redirect_url)
+                    logger.info(f"OIDC Magic Link authorization successful, showing success page before redirect to: {oidc_params['redirect_uri']}")
+                    
+                    # Get client name for better UX
+                    client = oidc_service.get_client(oidc_params["client_id"])
+                    client_name = client.client_name if client else oidc_params["client_id"]
+                    
+                    # Show seamless transition page
+                    response = templates.TemplateResponse(
+                        "auth_result.html",
+                        {
+                            "request": request,
+                            "success": True,
+                            "title": "登入成功",
+                            "message": "跳轉中...",
+                            "redirect_url": redirect_url,
+                            "auto_redirect": True,
+                            "redirect_delay": 1500,  # 1.5 seconds for smooth transition
+                            "show_manual_link": False,
+                            "client_name": client_name,
+                            "seamless_mode": True  # Enable seamless transition mode
+                        }
+                    )
+                    
                     # Set session cookie for future SSO
                     response.set_cookie(
                         key="hackit_sso_session",

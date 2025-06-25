@@ -106,21 +106,25 @@ async def authorization_endpoint(
                 logger.info(f"User {user_session.get('email')} already authenticated, generating OIDC auth code")
                 
                 # User is authenticated, generate authorization code
-                auth_code = oidc_service.generate_authorization_code(
-                    client_id=client_id,
-                    user_id=user_id,
-                    redirect_uri=redirect_uri,
-                    scope=scope,
-                    nonce=nonce
-                )
-                
-                # Redirect back to client with authorization code
-                redirect_url = f"{redirect_uri}?code={auth_code}"
-                if state:
-                    redirect_url += f"&state={state}"
-                
-                logger.info(f"OIDC seamless login: redirecting to {redirect_uri}")
-                return RedirectResponse(url=redirect_url)
+                try:
+                    auth_code = oidc_service.generate_authorization_code(
+                        client_id=client_id,
+                        user_id=user_id,
+                        redirect_uri=redirect_uri,
+                        scope=scope,
+                        nonce=nonce
+                    )
+                    
+                    # Redirect back to client with authorization code
+                    redirect_url = f"{redirect_uri}?code={auth_code}"
+                    if state:
+                        redirect_url += f"&state={state}"
+                    
+                    logger.info(f"OIDC seamless login: redirecting to {redirect_uri}")
+                    return RedirectResponse(url=redirect_url)
+                except Exception as e:
+                    logger.error(f"Error generating authorization code for existing session: {str(e)}")
+                    # Fall through to login flow if code generation fails
         
         # User not authenticated, save OIDC state to Redis and redirect to SSO login
         oidc_state_id = secrets.token_urlsafe(32)
@@ -187,7 +191,11 @@ async def token_endpoint(
         
         if grant_type == "authorization_code":
             if not code or not redirect_uri:
+                logger.warning(f"Token endpoint: Missing required parameters - code: {bool(code)}, redirect_uri: {bool(redirect_uri)}")
                 raise HTTPException(status_code=400, detail="Missing required parameters")
+            
+            logger.info(f"Token endpoint: Processing authorization code exchange for client {client_id}")
+            logger.debug(f"Token endpoint: code={code[:8]}..., redirect_uri={redirect_uri}")
             
             token_response = await oidc_service.exchange_code_for_tokens(
                 code=code,
@@ -197,8 +205,10 @@ async def token_endpoint(
             )
             
             if not token_response:
+                logger.error(f"Token endpoint: Invalid authorization code for client {client_id}")
                 raise HTTPException(status_code=400, detail="Invalid authorization code")
             
+            logger.info(f"Token endpoint: Successfully exchanged authorization code for tokens for client {client_id}")
             return token_response.model_dump()
             
         elif grant_type == "refresh_token":
