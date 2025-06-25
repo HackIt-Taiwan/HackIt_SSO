@@ -110,7 +110,11 @@ class TurnstileManager {
         this.fallbackMode = false;
         this.retryCount = 0;
         this.maxRetries = 3;
-        this.initStartTime = Date.now();
+        
+        // Smart queue mechanism for early submissions
+        this.isFullyReady = false;
+        this.pendingSubmissions = [];
+        this.readyCallbacks = [];
         
         this.setupCallbacks();
     }
@@ -124,12 +128,21 @@ class TurnstileManager {
 
     async initialize() {
         try {
-            // Start with a shorter timeout for faster initialization
-            await this.waitForApi(5000);
+            await this.waitForApi();
             await this.render();
+            
+            // Mark as fully ready and process any pending submissions
+            this.isFullyReady = true;
+            this.processPendingSubmissions();
+            this.notifyReadyCallbacks();
         } catch (error) {
             console.warn('Turnstile initialization failed, enabling fallback mode:', error);
             this.enableFallback();
+            
+            // Still mark as ready for fallback mode
+            this.isFullyReady = true;
+            this.processPendingSubmissions();
+            this.notifyReadyCallbacks();
         }
     }
 
@@ -150,7 +163,7 @@ class TurnstileManager {
                 } else if (attempts >= maxAttempts) {
                     reject(new Error('Turnstile API timeout'));
                 } else {
-                    setTimeout(check, 50); // Faster polling
+                    setTimeout(check, 50);
                 }
             };
             
@@ -164,12 +177,6 @@ class TurnstileManager {
             throw new Error('Turnstile element or API not available');
         }
 
-        // Check if already rendered
-        if (this.widget !== null) {
-            console.log('Turnstile already rendered, skipping...');
-            return;
-        }
-
         try {
             this.widget = window.turnstile.render(element, {
                 sitekey: this.config.get('turnstileSiteKey'),
@@ -181,8 +188,7 @@ class TurnstileManager {
             });
             
             this.isReady = true;
-            const initTime = Date.now() - this.initStartTime;
-            console.log(`✅ Turnstile widget ready (${initTime}ms)`);
+            console.log('✅ Turnstile widget ready');
         } catch (error) {
             console.error('Turnstile render failed:', error);
             throw error;
@@ -206,36 +212,46 @@ class TurnstileManager {
         if (this.retryCount < this.maxRetries) {
             this.retryCount++;
             console.log(`Retrying Turnstile (${this.retryCount}/${this.maxRetries})`);
-            setTimeout(() => this.render().catch(() => this.enableFallback()), 1000); // Faster retry
+            setTimeout(() => this.render().catch(() => this.enableFallback()), 2000);
         } else {
             this.enableFallback();
         }
         
         if (this.rejectToken) {
-            this.rejectToken(new Error('Turnstile verification failed'));
+            this.rejectToken(new Error('驗證失敗，請稍後再試'));
             this.rejectToken = null;
+            this.resolveToken = null;
         }
     }
 
     onExpired() {
-        console.log('Turnstile token expired');
-        this.reset();
+        console.log('⏰ Turnstile token expired');
+        if (this.rejectToken) {
+            this.rejectToken(new Error('驗證已過期，請重新嘗試'));
+            this.rejectToken = null;
+            this.resolveToken = null;
+        }
     }
 
     enableFallback() {
         this.fallbackMode = true;
-        this.isReady = true; // Mark as ready even in fallback mode
-        console.log('🔄 Turnstile fallback mode enabled');
-        
-        // Generate a placeholder token for fallback
-        this.fallbackToken = 'fallback_' + Date.now();
+        this.isReady = true;
+        console.log('⚠️ Turnstile fallback mode enabled');
     }
 
+    // Smart token retrieval with queueing support
     async getToken() {
         return new Promise((resolve, reject) => {
+            // If not fully ready yet, queue the request
+            if (!this.isFullyReady) {
+                console.log('📥 Queueing submission request (Turnstile not ready yet)');
+                this.pendingSubmissions.push({ resolve, reject });
+                return;
+            }
+
+            // If in fallback mode, return immediately
             if (this.fallbackMode) {
-                console.log('Using fallback token');
-                resolve(this.fallbackToken);
+                resolve('FALLBACK_TOKEN');
                 return;
             }
 
@@ -244,45 +260,79 @@ class TurnstileManager {
                 return;
             }
 
+            // Check for existing token
             try {
-                this.resolveToken = resolve;
-                this.rejectToken = reject;
+                const existingToken = window.turnstile.getResponse(this.widget);
+                if (existingToken && existingToken.trim()) {
+                    resolve(existingToken);
+                    return;
+                }
+            } catch (error) {
+                console.log('No existing token available');
+            }
+
+            // Execute new verification
+            this.resolveToken = resolve;
+            this.rejectToken = reject;
+
+            try {
+                window.turnstile.execute(this.widget);
                 
-                // Set a timeout for token generation
-                const timeout = setTimeout(() => {
+                // Timeout protection
+                setTimeout(() => {
                     if (this.resolveToken) {
-                        this.rejectToken(new Error('Turnstile token timeout'));
+                        this.rejectToken(new Error('驗證超時，請重新嘗試'));
                         this.resolveToken = null;
                         this.rejectToken = null;
                     }
-                }, 10000);
-
-                // Clear timeout when token is received
-                const originalResolve = this.resolveToken;
-                this.resolveToken = (token) => {
-                    clearTimeout(timeout);
-                    originalResolve(token);
-                };
-
-                window.turnstile.execute(this.widget);
+                }, 30000);
             } catch (error) {
-                reject(error);
+                reject(new Error('驗證執行失敗'));
             }
         });
     }
 
-    reset() {
-        if (this.fallbackMode) {
-            // Generate new fallback token
-            this.fallbackToken = 'fallback_' + Date.now();
-            return;
+    // Process any submissions that were queued while initializing
+    processPendingSubmissions() {
+        if (this.pendingSubmissions.length > 0) {
+            console.log(`📤 Processing ${this.pendingSubmissions.length} queued submission(s)`);
+            
+            this.pendingSubmissions.forEach(({ resolve, reject }) => {
+                // Re-call getToken for each queued request
+                this.getToken().then(resolve).catch(reject);
+            });
+            
+            this.pendingSubmissions = [];
         }
+    }
 
-        if (this.widget && window.turnstile) {
+    // Add callback to be notified when ready
+    onReady(callback) {
+        if (this.isFullyReady) {
+            callback();
+        } else {
+            this.readyCallbacks.push(callback);
+        }
+    }
+
+    // Notify all ready callbacks
+    notifyReadyCallbacks() {
+        this.readyCallbacks.forEach(callback => {
+            try {
+                callback();
+            } catch (error) {
+                console.error('Ready callback error:', error);
+            }
+        });
+        this.readyCallbacks = [];
+    }
+
+    reset() {
+        if (this.isReady && this.widget && window.turnstile && !this.fallbackMode) {
             try {
                 window.turnstile.reset(this.widget);
             } catch (error) {
-                console.warn('Turnstile reset failed:', error);
+                console.error('Turnstile reset failed:', error);
             }
         }
     }
@@ -323,63 +373,37 @@ class UIManager {
 
     setupEventListeners() {
         // Email input focus effects
-        if (this.elements.emailInput) {
-            this.elements.emailInput.addEventListener('focus', () => {
-                if (this.elements.emailInput.parentElement) {
-                    this.elements.emailInput.parentElement.style.transform = 'scale(1.02)';
-                }
-            });
-            
-            this.elements.emailInput.addEventListener('blur', () => {
-                if (this.elements.emailInput.parentElement) {
-                    this.elements.emailInput.parentElement.style.transform = 'scale(1)';
-                }
-            });
-        }
+        this.elements.emailInput.addEventListener('focus', () => {
+            this.elements.emailInput.parentElement.style.transform = 'scale(1.02)';
+        });
+        
+        this.elements.emailInput.addEventListener('blur', () => {
+            this.elements.emailInput.parentElement.style.transform = 'scale(1)';
+        });
     }
 
     showLoginSection() {
-        if (this.elements.loginSection) {
-            this.elements.loginSection.style.display = 'block';
-        }
-        if (this.elements.loggedInSection) {
-            this.elements.loggedInSection.style.display = 'none';
-        }
+        this.elements.loginSection.style.display = 'block';
+        this.elements.loggedInSection.style.display = 'none';
     }
 
     showLoggedInSection(user) {
-        if (this.elements.loginSection) {
-            this.elements.loginSection.style.display = 'none';
-        }
-        if (this.elements.loggedInSection) {
-            this.elements.loggedInSection.style.display = 'block';
-        }
+        this.elements.loginSection.style.display = 'none';
+        this.elements.loggedInSection.style.display = 'block';
         this.updateUserInfo(user);
     }
 
     updateUserInfo(user) {
-        if (this.elements.userNameEl) {
-            this.elements.userNameEl.textContent = user.real_name || '用戶';
-        }
-        if (this.elements.userEmailEl) {
-            this.elements.userEmailEl.textContent = user.email || '';
-        }
+        this.elements.userNameEl.textContent = user.real_name || '用戶';
+        this.elements.userEmailEl.textContent = user.email || '';
         
         if (user.avatar_base64) {
-            if (this.elements.userAvatarImg) {
-                this.elements.userAvatarImg.src = `data:image/jpeg;base64,${user.avatar_base64}`;
-                this.elements.userAvatarImg.style.display = 'block';
-            }
-            if (this.elements.userAvatarPlaceholder) {
-                this.elements.userAvatarPlaceholder.style.display = 'none';
-            }
+            this.elements.userAvatarImg.src = `data:image/jpeg;base64,${user.avatar_base64}`;
+            this.elements.userAvatarImg.style.display = 'block';
+            this.elements.userAvatarPlaceholder.style.display = 'none';
         } else {
-            if (this.elements.userAvatarImg) {
-                this.elements.userAvatarImg.style.display = 'none';
-            }
-            if (this.elements.userAvatarPlaceholder) {
-                this.elements.userAvatarPlaceholder.style.display = 'flex';
-            }
+            this.elements.userAvatarImg.style.display = 'none';
+            this.elements.userAvatarPlaceholder.style.display = 'flex';
         }
     }
 
@@ -419,68 +443,58 @@ class UIManager {
 
     setButtonLoading(loading) {
         const btn = this.elements.magicLinkBtn;
-        const span = btn.querySelector('span');
-        const icon = btn.querySelector('i');
-        
         if (loading) {
-            btn.classList.add('loading');
-            btn.classList.remove('locked', 'preparing', 'ready');
             btn.disabled = true;
-            
-            if (!btn.querySelector('.loading-dots')) {
-                span.innerHTML = 'sending...<div class="loading-dots"><span></span><span></span><span></span></div>';
-            }
-            if (icon) icon.style.display = 'none';
+            btn.classList.add('loading');
+            btn.innerHTML = `
+                <span>處理中</span>
+                <div class="loading-dots">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </div>
+            `;
         } else {
-            btn.classList.remove('loading');
             btn.disabled = false;
-            span.textContent = '發送魔法連結';
-            if (icon) {
-                icon.style.display = 'block';
-                feather.replace();
-            }
-        }
-    }
-
-    setButtonPreparing(preparing) {
-        const btn = this.elements.magicLinkBtn;
-        const span = btn.querySelector('span');
-        
-        if (preparing) {
-            btn.classList.add('preparing');
-            btn.classList.remove('loading', 'locked', 'ready');
-            btn.disabled = false; // Keep button clickable in preparing state
-            span.textContent = '發送魔法連結';
-        } else {
-            btn.classList.remove('preparing');
-            span.textContent = '發送魔法連結';
-        }
-    }
-
-    setButtonReady(ready) {
-        const btn = this.elements.magicLinkBtn;
-        
-        if (ready) {
-            btn.classList.add('ready');
-            btn.classList.remove('loading', 'locked', 'preparing');
-        } else {
-            btn.classList.remove('ready');
+            btn.classList.remove('loading');
+            btn.innerHTML = `
+                <span>發送魔法連結</span>
+                <i data-feather="arrow-right"></i>
+            `;
+            feather.replace();
         }
     }
 
     setButtonLocked(locked) {
         const btn = this.elements.magicLinkBtn;
-        const span = btn.querySelector('span');
-        
         if (locked) {
-            btn.classList.add('locked');
-            btn.classList.remove('loading', 'preparing', 'ready');
             btn.disabled = true;
-            span.textContent = '請稍候再試';
+            btn.classList.add('locked');
+            btn.innerHTML = `
+                <span>處理中</span>
+                <i data-feather="clock"></i>
+            `;
+            feather.replace();
         } else {
-            btn.classList.remove('locked');
             btn.disabled = false;
-            span.textContent = '發送魔法連結';
+            btn.classList.remove('locked');
+            btn.innerHTML = `
+                <span>發送魔法連結</span>
+                <i data-feather="arrow-right"></i>
+            `;
+            feather.replace();
+        }
+    }
+
+    setLogoutButtonLoading(loading) {
+        const btn = this.elements.logoutBtn;
+        if (loading) {
+            btn.disabled = true;
+            btn.innerHTML = '<span>處理中...</span>';
+        } else {
+            btn.disabled = false;
+            btn.innerHTML = '<i data-feather="log-out"></i><span>登出</span>';
+            feather.replace();
         }
     }
 
@@ -496,18 +510,6 @@ class UIManager {
         setTimeout(() => {
             this.elements.emailInput.style.borderColor = '';
         }, 2000);
-    }
-
-    setLogoutButtonLoading(loading) {
-        const btn = this.elements.logoutBtn;
-        if (loading) {
-            btn.disabled = true;
-            btn.innerHTML = '<span>處理中...</span>';
-        } else {
-            btn.disabled = false;
-            btn.innerHTML = '<i data-feather="log-out"></i><span>登出</span>';
-            feather.replace();
-        }
     }
 }
 
@@ -599,8 +601,6 @@ class SSOApp {
         
         this.isSubmitting = false;
         this.isButtonLocked = false;
-        this.isFullyReady = false; // Track if all components are ready
-        this.pendingSubmission = null; // Store pending submission data
         
         this.initialize();
     }
@@ -609,55 +609,29 @@ class SSOApp {
         console.log('🚀 Initializing SSO App...');
         
         try {
-            // Setup form handling immediately (but with readiness check)
-            this.setupFormHandling();
-            
-            // Setup logout handling
-            this.setupLogoutHandling();
-            
-            // Show preparing state - let user know system is getting ready
-            this.ui.setButtonPreparing(true);
-            
-            // Initialize Turnstile (this may take time)
+            // Initialize Turnstile
             await this.turnstile.initialize();
             
             // Check authentication status
             await this.auth.checkStatus();
             
+            // Setup form submission
+            this.setupFormHandling();
+            
+            // Setup logout handling
+            this.setupLogoutHandling();
+            
             // Handle logout success message from URL
             this.handleLogoutSuccessMessage();
-            
-            // Mark as fully ready and show ready state
-            this.isFullyReady = true;
-            this.ui.setButtonPreparing(false);
-            this.ui.setButtonReady(true);
-            
-            // Remove ready pulse after a few seconds to not be distracting
-            setTimeout(() => {
-                this.ui.setButtonReady(false);
-            }, 3000);
-            
-            // Process any pending submission
-            if (this.pendingSubmission) {
-                console.log('Processing pending form submission...');
-                await this.processPendingSubmission();
-            }
             
             console.log('✅ SSO App initialized successfully');
         } catch (error) {
             console.error('❌ SSO App initialization failed:', error);
-            this.ui.setButtonPreparing(false);
             this.ui.showMessage('系統初始化失敗，請刷新頁面重試', 'error');
-            this.isFullyReady = true; // Allow submission even if initialization failed
         }
     }
 
     setupFormHandling() {
-        if (!this.ui.elements.loginForm) {
-            console.log('Login form not found, skipping form handling setup');
-            return;
-        }
-        
         this.ui.elements.loginForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             
@@ -666,51 +640,18 @@ class SSOApp {
                 return;
             }
             
-            const email = this.ui.elements.emailInput?.value?.trim();
-            if (!email) {
-                this.ui.showMessage('請輸入有效的電子郵件地址', 'error');
-                return;
-            }
-
-            // If not fully ready, store the submission and show subtle loading
-            if (!this.isFullyReady) {
-                console.log('System not ready, queuing submission...');
-                this.pendingSubmission = { email };
-                this.ui.setButtonLoading(true);
-                this.ui.showMessage('正在發送魔法連結...', 'info', false);
-                return;
-            }
-            
             await this.handleFormSubmit();
         });
     }
 
-    async processPendingSubmission() {
-        if (!this.pendingSubmission) return;
-        
-        const { email } = this.pendingSubmission;
-        this.pendingSubmission = null;
-        
-        // Set the email back to the input and submit
-        if (this.ui.elements.emailInput) {
-            this.ui.elements.emailInput.value = email;
-            await this.handleFormSubmit();
-        }
-    }
-
     setupLogoutHandling() {
-        if (!this.ui.elements.logoutBtn) {
-            console.log('Logout button not found, skipping logout handling setup');
-            return;
-        }
-        
         this.ui.elements.logoutBtn.addEventListener('click', () => {
             this.auth.logout();
         });
     }
 
     async handleFormSubmit() {
-        const email = this.ui.elements.emailInput?.value?.trim();
+        const email = this.ui.elements.emailInput.value.trim();
         if (!email) {
             this.ui.showMessage('請輸入有效的電子郵件地址', 'error');
             return;
@@ -721,11 +662,6 @@ class SSOApp {
         this.ui.hideMessage();
 
         try {
-            // Double-check readiness before getting token
-            if (!this.isFullyReady) {
-                throw new Error('系統尚未準備就緒，請稍後再試');
-            }
-            
             // Get Turnstile token
             const turnstileToken = await this.turnstile.getToken();
             
@@ -736,7 +672,7 @@ class SSOApp {
                 this.config.get('oidcStateId')
             );
             
-            if (success && this.ui.elements.emailInput) {
+            if (success) {
                 this.ui.elements.emailInput.value = '';
             }
             

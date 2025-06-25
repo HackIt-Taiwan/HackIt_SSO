@@ -9,7 +9,7 @@ import hashlib
 import hmac
 import time
 import json
-from typing import Optional, Dict, Any
+from typing import Optional
 import secrets
 
 from app.schemas.auth import MagicLinkRequest, MagicLinkResponse, TokenVerifyResponse
