@@ -227,6 +227,17 @@ class OIDCService:
             
             code_data = json.loads(code_data_json)
             
+            # Check if code has already been used (for idempotency)
+            if code_data.get("used"):
+                logger.info(f"Authorization code already used, returning cached tokens: {code[:8]}...")
+                # Return cached tokens if available
+                cached_tokens = code_data.get("cached_tokens")
+                if cached_tokens:
+                    return OIDCTokenResponse(**cached_tokens)
+                else:
+                    logger.warning(f"Authorization code used but no cached tokens found: {code}")
+                    return None
+            
             # Verify client and redirect URI
             client = self.get_client(client_id)
             if not client or client.client_secret != client_secret:
@@ -241,8 +252,15 @@ class OIDCService:
                 logger.warning(f"Code data mismatch for client {client_id}")
                 return None
             
-            # Delete used code
-            redis_client.delete(f"oidc:auth_code:{code}")
+            # Mark code as used instead of deleting (for idempotency)
+            code_data["used"] = True
+            code_data["used_at"] = int(time.time())
+            redis_client.set(
+                f"oidc:auth_code:{code}",
+                json.dumps(code_data),
+                ex=300  # Keep for 5 minutes to handle duplicate requests
+            )
+            logger.debug(f"Marked authorization code {code[:8]}... as used")
             
             # Clean up OIDC state if present
             oidc_state_id = code_data.get("oidc_state_id")
@@ -258,13 +276,35 @@ class OIDCService:
             id_token = await self._generate_id_token(code_data["user_id"], client_id, code_data.get("nonce"))
             refresh_token = self._generate_refresh_token(code_data["user_id"], client_id)
             
-            return OIDCTokenResponse(
+            # Create token response
+            token_response = OIDCTokenResponse(
                 access_token=access_token,
                 id_token=id_token,
                 refresh_token=refresh_token,
                 expires_in=3600,
                 scope=code_data["scope"]
             )
+            
+            # Cache tokens for idempotency (in case of duplicate requests)
+            try:
+                code_data["cached_tokens"] = {
+                    "access_token": access_token,
+                    "id_token": id_token,
+                    "refresh_token": refresh_token,
+                    "expires_in": 3600,
+                    "scope": code_data["scope"]
+                }
+                redis_client.set(
+                    f"oidc:auth_code:{code}",
+                    json.dumps(code_data),
+                    ex=300  # Keep for 5 minutes
+                )
+                logger.debug(f"Cached tokens for authorization code {code[:8]}...")
+            except Exception as cache_error:
+                logger.warning(f"Failed to cache tokens: {cache_error}")
+                # Continue anyway - primary function still works
+            
+            return token_response
             
         except Exception as e:
             logger.error(f"Error exchanging code for tokens: {str(e)}")
