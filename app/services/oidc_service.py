@@ -283,6 +283,12 @@ class OIDCService:
             given_name = name_parts[0] if len(name_parts) > 0 else ""
             family_name = name_parts[1] if len(name_parts) > 1 else ""
             
+            # Ensure email is not None - this is critical for Outline
+            user_email = user.get("email")
+            if not user_email:
+                logger.error(f"User {user_id} has no email address - this will cause OIDC authentication to fail")
+                raise ValueError(f"User {user_id} has no email address")
+            
             payload = {
                 "iss": self.issuer,
                 "sub": user_id,
@@ -290,13 +296,13 @@ class OIDCService:
                 "exp": int(time.time()) + 3600,  # 1 hour
                 "iat": int(time.time()),
                 "auth_time": int(time.time()),
-                "email": user.get("email"),
+                "email": user_email,  # Use validated email
                 "email_verified": True,
                 "name": full_name,
                 "given_name": given_name,
                 "family_name": family_name,
                 "picture": user.get("avatar_base64"),
-                "preferred_username": user.get("email"),
+                "preferred_username": user_email,  # Use validated email
                 "locale": "zh-TW"
             }
             
@@ -373,15 +379,21 @@ class OIDCService:
             given_name = name_parts[0] if len(name_parts) > 0 else ""
             family_name = name_parts[1] if len(name_parts) > 1 else ""
             
+            # Ensure email is not None for UserInfo endpoint
+            user_email = user.get("email")
+            if not user_email:
+                logger.error(f"User {user_id} has no email address in UserInfo request")
+                return None
+            
             return OIDCUserInfo(
                 sub=user_id,
                 name=full_name,
                 given_name=given_name,
                 family_name=family_name,
-                email=user.get("email"),
+                email=user_email,  # Use validated email
                 email_verified=True,
                 picture=user.get("avatar_base64"),
-                preferred_username=user.get("email"),
+                preferred_username=user_email,  # Use validated email
                 locale="zh-TW",
                 updated_at=int(time.time())
             )
