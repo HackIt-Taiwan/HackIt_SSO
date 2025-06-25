@@ -291,6 +291,17 @@ class OIDCService:
                 logger.error(f"User {user_id} has no email address - this will cause OIDC authentication to fail")
                 raise ValueError(f"User {user_id} has no email address")
             
+            # Handle avatar - Outline expects URL, not Base64 data
+            avatar_url = None
+            avatar_base64 = user.get("avatar_base64")
+            if avatar_base64 and avatar_base64.startswith("data:image/"):
+                # For now, don't include picture if it's Base64 to avoid Outline validation error
+                # TODO: Implement avatar URL endpoint in the future
+                avatar_url = None
+            elif avatar_base64 and len(avatar_base64) < 4096:
+                # If it's already a URL and short enough, use it
+                avatar_url = avatar_base64
+            
             payload = {
                 "iss": self.issuer,
                 "sub": user_id,
@@ -303,10 +314,13 @@ class OIDCService:
                 "name": full_name,
                 "given_name": given_name,
                 "family_name": family_name,
-                "picture": user.get("avatar_base64"),
                 "preferred_username": user_email,  # Use validated email
                 "locale": "zh-TW"
             }
+            
+            # Only include picture if we have a valid URL
+            if avatar_url:
+                payload["picture"] = avatar_url
             
             if nonce:
                 payload["nonce"] = nonce
@@ -390,6 +404,16 @@ class OIDCService:
                 logger.error(f"User {user_id} has no email address in UserInfo request")
                 return None
             
+            # Handle avatar - Outline expects URL, not Base64 data
+            avatar_url = None
+            avatar_base64 = user.get("avatar_base64")
+            if avatar_base64 and avatar_base64.startswith("data:image/"):
+                # Don't include picture if it's Base64 to avoid Outline validation error
+                avatar_url = None
+            elif avatar_base64 and len(avatar_base64) < 4096:
+                # If it's already a URL and short enough, use it
+                avatar_url = avatar_base64
+            
             return OIDCUserInfo(
                 sub=user_id,
                 name=full_name,
@@ -397,7 +421,7 @@ class OIDCService:
                 family_name=family_name,
                 email=user_email,  # Use validated email
                 email_verified=True,
-                picture=user.get("avatar_base64"),
+                picture=avatar_url,  # Use validated avatar URL or None
                 preferred_username=user_email,  # Use validated email
                 locale="zh-TW",
                 updated_at=int(time.time())
