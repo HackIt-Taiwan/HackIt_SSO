@@ -180,15 +180,64 @@ async def logout(request: Request):
             "message": "登出成功"
         }
 
+async def check_user_session(request: Request) -> Optional[Dict[str, Any]]:
+    """Check if user has an active SSO session via cookie."""
+    try:
+        # Check for SSO session cookie
+        session_cookie = request.cookies.get("hackit_sso_session")
+        if not session_cookie:
+            return None
+        
+        # Get session data from Redis
+        session_data = redis_client.get(f"session:{session_cookie}")
+        if not session_data:
+            return None
+        
+        # Parse session data
+        session_info = json.loads(session_data)
+        
+        # Verify session is still valid
+        import time
+        if session_info.get("expires_at", 0) < time.time():
+            # Session expired, clean up
+            redis_client.delete(f"session:{session_cookie}")
+            return None
+        
+        return session_info
+        
+    except Exception as e:
+        logger.error(f"Error checking user session: {str(e)}")
+        return None
+
 @router.get("/", response_class=HTMLResponse)
 async def login_page(
     request: Request,
     oidc_state: Optional[str] = Query(None),
-    error: Optional[str] = Query(None)
+    error: Optional[str] = Query(None),
+    logout: Optional[str] = Query(None)
 ):
     """
     Serve the login page with Turnstile configuration and OIDC support.
+    Also handles authenticated users by showing them their status.
     """
+    
+    # Check if user is already authenticated
+    user_session = await check_user_session(request)
+    if user_session and not logout:
+        # User is already logged in, show authenticated state
+        logger.info(f"User {user_session.get('email')} already authenticated, showing dashboard")
+        
+        return templates.TemplateResponse(
+            "index.html",
+            {
+                "request": request,
+                "authenticated": True,
+                "user_info": user_session,
+                "static_version": settings.STATIC_VERSION,
+                "logout_success": logout == "success"
+            }
+        )
+    
     logger.info(f"Serving login page with Turnstile site key: {settings.TURNSTILE_SITE_KEY}")
     
     # Prepare OIDC parameters for the template
@@ -231,12 +280,14 @@ async def login_page(
         "index.html",
         {
             "request": request,
+            "authenticated": False,
             "turnstile_site_key": settings.TURNSTILE_SITE_KEY,
             "oidc_params": oidc_params,
             "oidc_client_name": oidc_client_name,
             "oidc_state_id": oidc_state,
             "error_message": error_message,
-            "static_version": settings.STATIC_VERSION
+            "static_version": settings.STATIC_VERSION,
+            "logout_success": logout == "success"
         }
     )
 

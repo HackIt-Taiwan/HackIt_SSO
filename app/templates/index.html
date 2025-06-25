@@ -17,6 +17,7 @@
     <div class="container">
         <div class="login-card">
             <div class="card-content">
+                {% if not authenticated %}
                 <!-- Login Form (shown when not authenticated) -->
                 <div id="login-section">
                     <div class="logo-section">
@@ -120,6 +121,24 @@
     </div>
 
     <!-- Main Application Script -->
+    <script>
+        // Pass server-side authentication state to JavaScript
+        window.serverAuthState = {
+            authenticated: {% if authenticated %}true{% else %}false{% endif %},
+            {% if authenticated and user_info %}
+            userInfo: {
+                id: "{{ user_info.get('user_id', '') }}",
+                email: "{{ user_info.get('email', '') }}",
+                realName: "{{ user_info.get('real_name', '') }}",
+                avatarBase64: "{{ user_info.get('avatar_base64', '') }}",
+                guildId: "{{ user_info.get('guild_id', '') }}"
+            },
+            {% else %}
+            userInfo: null,
+            {% endif %}
+            logoutSuccess: {% if logout_success %}true{% else %}false{% endif %}
+        };
+    </script>
     <script src="{{ url_for('static', path='/js/script.js') }}?v={{ static_version }}"></script>
     
     <!-- Initialize Feather Icons -->
