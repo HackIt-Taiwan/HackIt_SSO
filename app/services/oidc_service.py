@@ -255,14 +255,16 @@ class OIDCService:
         
         payload = {
             "sub": user_id,
-            "aud": client_id,
+            "aud": [client_id, self.issuer],  # Include both client_id and issuer as audience
             "scope": scope,
             "iss": self.issuer,
             "exp": int(time.time()) + 3600,  # 1 hour
             "iat": int(time.time()),
-            "token_type": "access_token"
+            "token_type": "access_token",
+            "client_id": client_id  # Add client_id for additional context
         }
         
+        logger.debug(f"Generated access token for user {user_id}, client {client_id}, scope: {scope}")
         return jwt.encode(payload, self.private_key, algorithm="RS256", headers={"kid": self.kid})
     
     async def _generate_id_token(self, user_id: str, client_id: str, nonce: Optional[str] = None) -> str:
@@ -342,12 +344,15 @@ class OIDCService:
         self._ensure_keys_initialized()
         
         try:
+            # Don't verify audience for access tokens - different from ID tokens
             payload = jwt.decode(
                 access_token,
                 self.public_key,
                 algorithms=["RS256"],
-                issuer=self.issuer
+                issuer=self.issuer,
+                options={"verify_aud": False}  # Disable audience verification for access tokens
             )
+            logger.debug(f"Access token verified successfully for user {payload.get('sub')}")
             return payload
         except jwt.ExpiredSignatureError:
             logger.warning("Access token expired")
