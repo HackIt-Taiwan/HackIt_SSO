@@ -35,6 +35,13 @@
                     {% endif %}
                     <p class="subtitle">改變世界的起點，由你創造</p>
                     
+                    {% if error_message %}
+                    <div class="error-message" style="color: #ef4444; background: rgba(239, 68, 68, 0.1); padding: 12px; border-radius: 8px; margin-bottom: 16px; border-left: 4px solid #ef4444;">
+                        <i data-feather="alert-circle" style="width: 16px; height: 16px; margin-right: 8px;"></i>
+                        {{ error_message }}
+                    </div>
+                    {% endif %}
+                    
                     <form id="login-form">
                         <div class="input-group">
                             <input type="email" id="email" name="email" placeholder="請輸入您的電子郵件" required>

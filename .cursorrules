@@ -197,6 +197,15 @@
   - *UX*：支援可配置的自動跳轉延遲時間和手動跳轉連結  
   - *結論*：OIDC 跳轉前需要先在 SSO 系統建立完整的用戶會話狀態
 
+- **2025-01-12**  
+  - *錯誤*：OIDC state 參數不匹配導致 Outline 認證失敗  
+  - *原因*：Magic Link 驗證後過早刪除 Redis 中的 OIDC 狀態，導致 Outline 無法驗證 state 參數  
+  - *修正*：不在 Magic Link 驗證時刪除 OIDC 狀態，改為在 token exchange 完成後清理  
+  - *實作*：將 oidc_state_id 存儲到授權碼中，token exchange 成功後自動清理相關狀態  
+  - *UX*：改為直接跳轉，完全移除過渡頁面，實現極速無縫登入體驗  
+  - *簡化*：刪除 auth_result.html 模板，錯誤處理改為 URL 參數 + 登入頁面訊息顯示  
+  - *結論*：OIDC 狀態管理需要在完整流程結束後才能清理，確保客戶端能正確驗證
+
 # Scratchpad
 
 ## Plan

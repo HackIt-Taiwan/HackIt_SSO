@@ -177,7 +177,8 @@ class OIDCService:
     
     def generate_authorization_code(self, client_id: str, user_id: str, 
                                   redirect_uri: str, scope: str, 
-                                  nonce: Optional[str] = None) -> str:
+                                  nonce: Optional[str] = None, 
+                                  oidc_state_id: Optional[str] = None) -> str:
         """Generate authorization code"""
         code = secrets.token_urlsafe(32)
         code_data = {
@@ -186,6 +187,7 @@ class OIDCService:
             "redirect_uri": redirect_uri,
             "scope": scope,
             "nonce": nonce,
+            "oidc_state_id": oidc_state_id,  # Store the OIDC state ID for cleanup
             "created_at": int(time.time())
         }
         
@@ -241,6 +243,15 @@ class OIDCService:
             
             # Delete used code
             redis_client.delete(f"oidc:auth_code:{code}")
+            
+            # Clean up OIDC state if present
+            oidc_state_id = code_data.get("oidc_state_id")
+            if oidc_state_id:
+                try:
+                    redis_client.delete(f"oidc_pending:{oidc_state_id}")
+                    logger.debug(f"Cleaned up OIDC state {oidc_state_id} after successful token exchange")
+                except Exception as e:
+                    logger.warning(f"Failed to clean up OIDC state {oidc_state_id}: {str(e)}")
             
             # Generate tokens
             access_token = self._generate_access_token(code_data["user_id"], client_id, code_data["scope"])

@@ -183,7 +183,8 @@ async def logout(request: Request):
 @router.get("/", response_class=HTMLResponse)
 async def login_page(
     request: Request,
-    oidc_state: Optional[str] = Query(None)
+    oidc_state: Optional[str] = Query(None),
+    error: Optional[str] = Query(None)
 ):
     """
     Serve the login page with Turnstile configuration and OIDC support.
@@ -216,6 +217,16 @@ async def login_page(
             logger.error(f"Error loading OIDC state: {str(e)}")
             oidc_params = None
     
+    # Prepare error message if present
+    error_message = None
+    if error:
+        error_messages = {
+            "invalid_token": "此登入連結已過期或無效。請重新請求新的登入連結。",
+            "session_failed": "無法建立用戶會話，請稍後再試。",
+            "system_error": "系統發生錯誤，請稍後再試。"
+        }
+        error_message = error_messages.get(error, "發生未知錯誤，請稍後再試。")
+
     return templates.TemplateResponse(
         "index.html",
         {
@@ -224,6 +235,7 @@ async def login_page(
             "oidc_params": oidc_params,
             "oidc_client_name": oidc_client_name,
             "oidc_state_id": oidc_state,
+            "error_message": error_message,
             "static_version": settings.STATIC_VERSION
         }
     )
@@ -307,17 +319,8 @@ async def verify_magic_link(request: Request, token: str = Query(...)):
         token_data = MagicLinkService.verify_magic_token(token)
         
         if not token_data:
-            # Token invalid or expired
-            return templates.TemplateResponse(
-                "auth_result.html", 
-                {
-                    "request": request,
-                    "success": False,
-                    "title": "連結已失效",
-                    "message": "此登入連結已過期或無效。請重新請求新的登入連結。",
-                    "redirect_url": "/"
-                }
-            )
+            # Token invalid or expired - redirect to login page with error
+            return RedirectResponse(url="/?error=invalid_token", status_code=302)
         
         email = token_data.get("email")
         oidc_state_id = token_data.get("oidc_state_id")
@@ -326,16 +329,8 @@ async def verify_magic_link(request: Request, token: str = Query(...)):
         session_data = await MagicLinkService.create_user_session(email)
         
         if not session_data:
-            return templates.TemplateResponse(
-                "auth_result.html",
-                {
-                    "request": request,
-                    "success": False,
-                    "title": "登入失敗",
-                    "message": "無法建立用戶會話，請稍後再試。",
-                    "redirect_url": "/"
-                }
-            )
+            # Session creation failed - redirect to login page with error
+            return RedirectResponse(url="/?error=session_failed", status_code=302)
         
         # Create SSO session cookie for seamless future logins
         session_cookie = await create_sso_session(session_data["user_info"])
@@ -348,8 +343,9 @@ async def verify_magic_link(request: Request, token: str = Query(...)):
                 if oidc_state_data:
                     oidc_params = json.loads(oidc_state_data)
                     
-                    # Clean up the OIDC state from Redis
-                    redis_client.delete(f"oidc_pending:{oidc_state_id}")
+                    # Don't delete OIDC state yet - let Outline verify it first
+                    # The state will be cleaned up by Redis TTL (15 minutes) or during token exchange
+                    logger.debug(f"Keeping OIDC state {oidc_state_id} in Redis for Outline verification")
                     
                     from app.services.oidc_service import OIDCService
                     oidc_service = OIDCService()
@@ -364,7 +360,8 @@ async def verify_magic_link(request: Request, token: str = Query(...)):
                         user_id=session_data["user_info"]["id"],
                         redirect_uri=oidc_params["redirect_uri"],
                         scope=oidc_params.get("scope", "openid"),
-                        nonce=oidc_params.get("nonce")
+                        nonce=oidc_params.get("nonce"),
+                        oidc_state_id=oidc_state_id  # Pass the OIDC state ID for cleanup later
                     )
                     logger.info(f"Generated authorization code: {auth_code[:8]}... for OIDC flow")
                     
@@ -373,28 +370,10 @@ async def verify_magic_link(request: Request, token: str = Query(...)):
                     if oidc_params.get("state"):
                         redirect_url += f"&state={oidc_params['state']}"
                     
-                    logger.info(f"OIDC Magic Link authorization successful, showing success page before redirect to: {oidc_params['redirect_uri']}")
+                    logger.info(f"OIDC Magic Link authorization successful, redirecting directly to: {oidc_params['redirect_uri']}")
                     
-                    # Get client name for better UX
-                    client = oidc_service.get_client(oidc_params["client_id"])
-                    client_name = client.client_name if client else oidc_params["client_id"]
-                    
-                    # Show seamless transition page
-                    response = templates.TemplateResponse(
-                        "auth_result.html",
-                        {
-                            "request": request,
-                            "success": True,
-                            "title": "登入成功",
-                            "message": "跳轉中...",
-                            "redirect_url": redirect_url,
-                            "auto_redirect": True,
-                            "redirect_delay": 1500,  # 1.5 seconds for smooth transition
-                            "show_manual_link": False,
-                            "client_name": client_name,
-                            "seamless_mode": True  # Enable seamless transition mode
-                        }
-                    )
+                    # Direct redirect to OIDC client - no transition page needed
+                    response = RedirectResponse(url=redirect_url)
                     
                     # Set session cookie for future SSO
                     response.set_cookie(
@@ -431,16 +410,8 @@ async def verify_magic_link(request: Request, token: str = Query(...)):
         
     except Exception as e:
         logger.error(f"Error in magic link verification: {str(e)}")
-        return templates.TemplateResponse(
-            "auth_result.html",
-            {
-                "request": request,
-                "success": False,
-                "title": "系統錯誤",
-                "message": "驗證過程中發生錯誤，請稍後再試。",
-                "redirect_url": "/"
-            }
-        )
+        # System error - redirect to login page with error
+        return RedirectResponse(url="/?error=system_error", status_code=302)
 
 @router.post("/verify-token", response_model=TokenVerifyResponse)
 async def verify_token_api(token: str = Body(..., embed=True)):
