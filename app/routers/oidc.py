@@ -13,7 +13,7 @@ from app.schemas.oidc import (
     OIDCDiscoveryResponse, OIDCAuthorizationRequest, 
     OIDCTokenRequest, OIDCClient
 )
-from app.core.config import settings
+from app.core.config import settings, get_cookie_domain, check_user_session
 from app.auth.jwt_handler import decode_access_token
 from app.core.database import redis_client
 
@@ -23,35 +23,6 @@ logger = logging.getLogger(__name__)
 
 # Initialize OIDC service
 oidc_service = OIDCService()
-
-async def check_user_session(request: Request) -> Optional[Dict[str, Any]]:
-    """Check if user has an active SSO session via cookie."""
-    try:
-        # Check for SSO session cookie
-        session_cookie = request.cookies.get("hackit_sso_session")
-        if not session_cookie:
-            return None
-        
-        # Get session data from Redis
-        session_data = redis_client.get(f"session:{session_cookie}")
-        if not session_data:
-            return None
-        
-        # Parse session data
-        session_info = json.loads(session_data)
-        
-        # Verify session is still valid
-        import time
-        if session_info.get("expires_at", 0) < time.time():
-            # Session expired, clean up
-            redis_client.delete(f"session:{session_cookie}")
-            return None
-        
-        return session_info
-        
-    except Exception as e:
-        logger.error(f"Error checking user session: {str(e)}")
-        return None
 
 @router.get("/.well-known/openid-configuration", response_model=OIDCDiscoveryResponse)
 async def oidc_discovery():
@@ -88,22 +59,24 @@ async def authorization_endpoint(
     prompt: Optional[str] = Query(None),
     request: Request = None
 ):
-    """OIDC Authorization Endpoint"""
+    """OIDC Authorization Endpoint with enhanced session checking"""
     try:
         # Validate client
         client = oidc_service.get_client(client_id)
         if not client:
+            logger.warning(f"Invalid client_id: {client_id}")
             raise HTTPException(status_code=400, detail="Invalid client_id")
         
         if redirect_uri not in client.redirect_uris:
+            logger.warning(f"Invalid redirect_uri: {redirect_uri} not in {client.redirect_uris}")
             raise HTTPException(status_code=400, detail="Invalid redirect_uri")
         
-        # Check if user is already authenticated via session cookie
+        # Check if user is already authenticated via session cookie using unified function
         user_session = await check_user_session(request)
         if user_session:
             user_id = user_session.get("user_id")
             if user_id:
-                logger.info(f"User {user_session.get('email')} already authenticated, generating OIDC auth code")
+                logger.info(f"User {user_session.get('email')} already authenticated via SSO session, generating OIDC auth code for seamless login")
                 
                 # User is authenticated, generate authorization code
                 try:
@@ -120,11 +93,15 @@ async def authorization_endpoint(
                     if state:
                         redirect_url += f"&state={state}"
                     
-                    logger.info(f"OIDC seamless login: redirecting to {redirect_uri}")
+                    logger.info(f"OIDC seamless login successful: redirecting to {redirect_uri} for user {user_session.get('email')}")
                     return RedirectResponse(url=redirect_url)
                 except Exception as e:
                     logger.error(f"Error generating authorization code for existing session: {str(e)}")
                     # Fall through to login flow if code generation fails
+            else:
+                logger.warning(f"Session found but missing user_id: {user_session}")
+        else:
+            logger.debug(f"No valid SSO session found for OIDC authorization request from client {client_id}")
         
         # User not authenticated, save OIDC state to Redis and redirect to SSO login
         oidc_state_id = secrets.token_urlsafe(32)
@@ -146,7 +123,7 @@ async def authorization_endpoint(
                 json.dumps(oidc_state_data),
                 ex=900  # 15 minutes
             )
-            logger.info(f"Saved OIDC state {oidc_state_id} for client {client_id}")
+            logger.info(f"Saved OIDC state {oidc_state_id} for client {client_id}, redirecting to SSO login")
         except Exception as e:
             logger.error(f"Error saving OIDC state: {str(e)}")
             # Fallback to current behavior if Redis fails
@@ -292,7 +269,7 @@ async def end_session_endpoint(
             response = RedirectResponse(url=redirect_url)
             response.delete_cookie(
                 key="hackit_sso_session",
-                domain=f".{settings.SSO_DOMAIN}",
+                domain=get_cookie_domain(),
                 path="/",
                 secure=True,
                 httponly=True,
@@ -306,7 +283,7 @@ async def end_session_endpoint(
             response = RedirectResponse(url=sso_home_url)
             response.delete_cookie(
                 key="hackit_sso_session",
-                domain=f".{settings.SSO_DOMAIN}",
+                domain=get_cookie_domain(),
                 path="/",
                 secure=True,
                 httponly=True,

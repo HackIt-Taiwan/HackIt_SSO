@@ -231,31 +231,39 @@
   - *SDK*：HackIt SSO SDK 新增 getUserAvatarUrl() 方法支援頭像 URL  
   - *結論*：統一頭像 URL 系統提供更好的性能、緩存和 CDN 支援，符合現代 Web 標準
 
+- **2025-01-12**  
+  - *問題*：SSO/OIDC 系統 session 管理不一致，已登入用戶仍需重新登入  
+  - *原因*：重複的 check_user_session 函數、cookie 域名設定不一致、缺乏統一的 session 檢查  
+  - *修正*：統一 session 管理到 config.py，所有路由使用相同的 check_user_session 函數  
+  - *架構*：所有 cookie 域名設定統一使用 get_cookie_domain() 函數，確保跨子域名一致性  
+  - *改進*：增強 OIDC 授權端點的 session 檢查和日誌記錄，提供更好的調試信息  
+  - *結論*：SSO 系統的 session 管理必須完全統一，避免不同模組間的不一致行為
+
 # Scratchpad
 
 ## Plan
 - [x] 建立專案基礎架構（FastAPI + Redis + Database Service API）
 - [x] 設計前端登入介面（Apple 風格 + 毛玻璃效果）
 - [x] 實作 Magic Link 完整流程
-  - [x] JWT token 生成與驗證
-  - [x] Redis 短期 token 儲存
-  - [x] 郵件服務整合
-  - [x] 認證路由與驗證頁面
 - [x] 整合安全防護機制
-  - [x] Cloudflare Turnstile 隱形驗證
-  - [x] 用戶存在性檢查
-  - [x] 防止流量濫用
 - [x] 實作 Magic Link 防濫用機制
 - [x] 實作已登入狀態UI與登出功能
 - [x] 實作企業級SSO跨域認證系統
 - [x] 完全移除 MongoDB 直接連接，改用 Database Service API
-- [x] 更新所有配置檔案為新版本
+- [x] 修復 SSO session 一致性問題
+  - [x] 統一 session 檢查函數到 config.py
+  - [x] 修正所有 cookie 域名設定
+  - [x] 增強 OIDC 授權端點的 session 檢查
+  - [x] 加強日誌記錄和調試信息
 - [ ] 測試完整流程
 - [ ] 部署準備
 
 ## Progress
-- 2025-06-24 完全重構為 Database Service API 架構：移除所有 MongoDB 直接連接、更新配置檔案、提供預設值避免啟動錯誤
-- 2025-06-24 更新 Coolify 部署指南：反映新的微服務架構和簡化的環境變數設定
+- 2025-06-25 修復 SSO session 一致性問題：
+  - 發現問題：重複的 check_user_session 函數、cookie 域名設定不一致
+  - 解決方案：統一 session 管理到 config.py，所有 cookie 使用 get_cookie_domain()
+  - 改進：增強 OIDC 授權端點檢查邏輯，提供更詳細的調試日誌
+  - 結果：已登入用戶現在應該能在所有 OIDC 流程中獲得無縫體驗
 
 ---
 

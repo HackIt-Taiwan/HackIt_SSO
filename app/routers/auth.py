@@ -15,8 +15,9 @@ import secrets
 from app.schemas.auth import MagicLinkRequest, MagicLinkResponse, TokenVerifyResponse
 from app.services.magic_link_service import MagicLinkService
 from app.services.turnstile_service import TurnstileService
-from app.core.config import settings
+from app.core.config import settings, get_cookie_domain, check_user_session
 from app.core.database import redis_client
+from app.auth.jwt_handler import decode_access_token
 import logging
 
 logger = logging.getLogger(__name__)
@@ -174,10 +175,10 @@ async def logout(request: Request):
             "message": "登出成功"
         })
         
-        # Clear session cookie
+        # Clear session cookie using unified domain setting
         response.delete_cookie(
             key="hackit_sso_session",
-            domain=".hackit.tw"
+            domain=get_cookie_domain()
         )
         
         return response
@@ -188,35 +189,6 @@ async def logout(request: Request):
             "success": True,  # Still return success for user experience
             "message": "登出成功"
         }
-
-async def check_user_session(request: Request) -> Optional[Dict[str, Any]]:
-    """Check if user has an active SSO session via cookie."""
-    try:
-        # Check for SSO session cookie
-        session_cookie = request.cookies.get("hackit_sso_session")
-        if not session_cookie:
-            return None
-        
-        # Get session data from Redis
-        session_data = redis_client.get(f"session:{session_cookie}")
-        if not session_data:
-            return None
-        
-        # Parse session data
-        session_info = json.loads(session_data)
-        
-        # Verify session is still valid
-        import time
-        if session_info.get("expires_at", 0) < time.time():
-            # Session expired, clean up
-            redis_client.delete(f"session:{session_cookie}")
-            return None
-        
-        return session_info
-        
-    except Exception as e:
-        logger.error(f"Error checking user session: {str(e)}")
-        return None
 
 @router.get("/", response_class=HTMLResponse)
 async def login_page(
@@ -230,7 +202,7 @@ async def login_page(
     Also handles authenticated users by showing them their status.
     """
     
-    # Check if user is already authenticated
+    # Check if user is already authenticated using unified function
     user_session = await check_user_session(request)
     if user_session and not logout:
         # User is already logged in, show authenticated state
@@ -443,7 +415,7 @@ async def verify_magic_link(request: Request, token: str = Query(...)):
                         httponly=True,
                         secure=True,
                         samesite="lax",
-                        domain=".hackit.tw"
+                        domain=get_cookie_domain()
                     )
                     return response
                 else:
@@ -464,7 +436,7 @@ async def verify_magic_link(request: Request, token: str = Query(...)):
             httponly=True,
             secure=True,
             samesite="lax",
-            domain=".hackit.tw"
+            domain=get_cookie_domain()
         )
         return response
         

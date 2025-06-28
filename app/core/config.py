@@ -1,6 +1,10 @@
 from pydantic_settings import BaseSettings
 from pydantic import EmailStr
-from typing import Optional
+from typing import Optional, Dict, Any
+from fastapi import Request
+import json
+import logging
+import time
 
 class Settings(BaseSettings):
     # Database Service (centralized API)
@@ -53,6 +57,53 @@ class Settings(BaseSettings):
         extra = "ignore"
 
 settings = Settings()
+
+# SSO session management
+logger = logging.getLogger(__name__)
+
+def get_cookie_domain() -> str:
+    """Get the correct cookie domain for SSO sessions."""
+    # For hackit.tw domain structure, use .hackit.tw for cross-subdomain cookies
+    return ".hackit.tw"
+
+async def check_user_session(request: Request) -> Optional[Dict[str, Any]]:
+    """
+    Centralized user session checking function.
+    Check if user has an active SSO session via cookie.
+    """
+    try:
+        # Check for SSO session cookie
+        session_cookie = request.cookies.get("hackit_sso_session")
+        if not session_cookie:
+            logger.debug("No SSO session cookie found")
+            return None
+        
+        # Get session data from Redis
+        from app.core.database import redis_client
+        session_data = redis_client.get(f"session:{session_cookie}")
+        if not session_data:
+            logger.debug(f"No session data found in Redis for cookie: {session_cookie[:8]}...")
+            return None
+        
+        # Parse session data
+        session_info = json.loads(session_data)
+        
+        # Verify session is still valid
+        current_time = int(time.time())
+        expires_at = session_info.get("expires_at", 0)
+        
+        if expires_at < current_time:
+            # Session expired, clean up
+            redis_client.delete(f"session:{session_cookie}")
+            logger.info(f"Session expired and cleaned up: {session_cookie[:8]}...")
+            return None
+        
+        logger.debug(f"Valid session found for user: {session_info.get('email')}")
+        return session_info
+        
+    except Exception as e:
+        logger.error(f"Error checking user session: {str(e)}")
+        return None
 
 def get_avatar_url(user_id: str) -> str:
     """Generate Database API avatar URL for a user."""
